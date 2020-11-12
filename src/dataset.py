@@ -94,12 +94,12 @@ class BuildDataset(torch.utils.data.Dataset):
 
         img = F.pad(img, pad=(11, 11))
 
-        mask = torch.from_numpy(mask.astype(np.uint8))
+        mask = torch.from_numpy(mask.astype(np.float))
         mask = F.interpolate(mask, size=1066)
         mask = mask.permute(0, 2, 1)
         mask = F.interpolate(mask, size=800)
         mask = mask.permute(0, 2, 1)
-        mask = F.pad(mask, pad=(11, 11))
+        mask = F.pad(mask, pad=(11, 11)).type(torch.uint8)
 
         bbox[:, 0] = bbox[:, 0] / 400 * 1066 + 11
         bbox[:, 2] = bbox[:, 2] / 400 * 1066 + 11
