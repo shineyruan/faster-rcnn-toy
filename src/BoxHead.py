@@ -1,11 +1,14 @@
 import torch
 import torch.nn.functional as F
 from torch import nn
-from utils import *
+import torchvision
 
 
 class BoxHead(torch.nn.Module):
-    def __init__(self, Classes=3, P=7):
+    def __init__(self, device='cuda', Classes=3, P=7):
+        super(BoxHead, self).__init__()
+
+        self.device = device
         self.C = Classes
         self.P = P
         # TODO initialize BoxHead
@@ -28,10 +31,10 @@ class BoxHead(torch.nn.Module):
 
         return labels, regressor_target
 
-    def MultiScaleRoiAlign(self, fpn_feat_list, proposals, P=7):
+    def MultiScaleRoiAlign(self, fpn_feat_list: list, proposals: list, P=7) -> torch.Tensor:
         """
         This function for each proposal finds the appropriate feature map to sample and using
-        RoIAlign it samples a (256,P,P) feature map. This feature map is then flattened into a 
+        RoIAlign it samples a (256,P,P) feature map. This feature map is then flattened into a
         (256*P*P) vector
         Input:
         ------
@@ -40,14 +43,38 @@ class BoxHead(torch.nn.Module):
              P: scalar
         Output:
         ------
-             feature_vectors: (total_proposals, 256*P*P)  (make sure the ordering of the proposals are the same as the ground truth creation)
+             feature_vectors: (total_proposals, 256*P*P)  (make sure the ordering of the proposals
+                                                            are the same as the ground truth
+                                                            creation)
         """
 
         #####################################
         # Here you can use torchvision.ops.RoIAlign check the docs
         #####################################
 
-        return feature_vectors
+        feature_vectors = []
+
+        for batch_i in range(len(proposals)):
+            w = proposals[batch_i][..., 2] - proposals[batch_i][..., 0]
+            h = proposals[batch_i][..., 3] - proposals[batch_i][..., 1]
+
+            # Given a proposal box with w and h we determine the FPN P_k according to the following:
+            #   k = floor(4+log_2(sqrt(w*h)/224))
+            #   where k is ranging from 2 to 5
+            #
+            # Get P[k-2] according to the calculated k value.
+            #
+            k = torch.floor(4 + torch.log2(torch.sqrt(w * h) / 224)).type(torch.int) - 2
+
+            for i, item in enumerate(k):
+                # get ROI align
+                roi_out = torchvision.ops.roi_align(fpn_feat_list[item][batch_i].unsqueeze(0),
+                                                    [proposals[batch_i][i].unsqueeze(0)],
+                                                    output_size=(P, P))
+                feature_vectors.append(torch.squeeze(roi_out))
+
+        feature_vectors = torch.stack(feature_vectors)
+        return torch.reshape(feature_vectors, (feature_vectors.shape[0], -1))
 
     def postprocess_detections(self, class_logits, box_regression, proposals,
                                conf_thresh=0.5, keep_num_preNMS=500, keep_num_postNMS=50):
