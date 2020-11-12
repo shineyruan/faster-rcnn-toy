@@ -6,13 +6,12 @@ import torch
 from dataset import BuildDataset, BuildDataLoader
 
 
-def pretrained_models_680(checkpoint_file, eval=True):
+def pretrained_models_680(checkpoint_file, eval=True, device='cuda'):
     model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=False)
 
     if(eval):
         model.eval()
 
-    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     model.to(device)
 
     backbone = model.backbone
