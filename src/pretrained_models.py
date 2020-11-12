@@ -101,7 +101,8 @@ if __name__ == '__main__':
                 img_squeeze = transforms.functional.normalize(images[i, :, :, :].to('cpu'),
                                                               [-0.485 / 0.229, -0.456 /
                                                                   0.224, -0.406 / 0.225],
-                                                              [1 / 0.229, 1 / 0.224, 1 / 0.225], inplace=False)
+                                                              [1 / 0.229, 1 / 0.224, 1 / 0.225],
+                                                              inplace=False)
                 fig, ax = plt.subplots(1, 1)
                 ax.imshow(img_squeeze.permute(1, 2, 0))
 
