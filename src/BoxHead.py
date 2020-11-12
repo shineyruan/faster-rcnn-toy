@@ -11,7 +11,16 @@ class BoxHead(torch.nn.Module):
         self.device = device
         self.C = Classes
         self.P = P
-        # TODO initialize BoxHead
+
+        # initialize BoxHead
+        self.intermediate = nn.Sequential(nn.Linear(in_features=256 * P * P, out_features=1024),
+                                          nn.Linear(in_features=1024, out_features=1024),
+                                          nn.ReLU())
+
+        self.class_head = nn.Sequential(nn.Linear(in_features=1024, out_features=self.C + 1),
+                                        nn.Softmax(dim=1))
+
+        self.reg_head = nn.Linear(in_features=1024, out_features=4 * self.C)
 
     def create_ground_truth(self, proposals, gt_labels, bbox):
         """
@@ -123,7 +132,7 @@ class BoxHead(torch.nn.Module):
 
         return loss, loss_class, loss_regr
 
-    def forward(self, feature_vectors):
+    def forward(self, feature_vectors: torch.Tensor) -> tuple:
         """
         Forward the pooled feature vectors through the intermediate layer and the classifier, 
         regressor of the box head
@@ -132,12 +141,16 @@ class BoxHead(torch.nn.Module):
                feature_vectors: (total_proposals, 256*P*P)
         Outputs:
         -----
-               class_logits: (total_proposals,(C+1)) (we assume classes are C classes plus 
+               class_logits: (total_proposals,(C+1)) (we assume classes are C classes plus
                                                         background, notice if you want to use
-                                                      CrossEntropyLoss you should not pass the 
+                                                      CrossEntropyLoss you should not pass the
                                                         output through softmax here)
                box_pred:     (total_proposals,4*C)
         """
+
+        intermediate_out = self.intermediate(feature_vectors)
+        class_logits = self.class_head(intermediate_out)
+        box_pred = self.reg_head(intermediate_out)
 
         return class_logits, box_pred
 
