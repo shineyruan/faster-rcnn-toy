@@ -17,8 +17,8 @@ class BoxHead(torch.nn.Module):
                                           nn.Linear(in_features=1024, out_features=1024),
                                           nn.ReLU())
 
-        self.class_head = nn.Sequential(nn.Linear(in_features=1024, out_features=self.C + 1),
-                                        nn.Softmax(dim=1))
+        self.class_head = nn.Linear(in_features=1024, out_features=self.C + 1)
+        self.softmax = nn.Softmax(dim=1)  # only used in testing mode
 
         self.reg_head = nn.Linear(in_features=1024, out_features=4 * self.C)
 
@@ -109,14 +109,54 @@ class BoxHead(torch.nn.Module):
 
         return boxes, scores, labels
 
-    def compute_loss(self, class_logits, box_preds, labels, regression_targets,
-                     lambda_coeff=1,
-                     effective_batch=150):
+    def classifier_loss(self, class_minibatch: torch.Tensor,
+                        class_minibatch_gt: torch.Tensor) -> float:
+        """
+        Compute the loss of the classifier
+        Input:
+        -----
+            class_minibatch: (mini_batch,(C+1))
+            class_minibatch_gt: (mini_batch,1)
+        Output:
+        ----
+            loss_class:  scalar
+        """
+
+        return torch.nn.CrossEntropyLoss(class_minibatch, class_minibatch_gt)
+
+    def regression_loss(self, box_preds: torch.Tensor, regression_targets: torch.Tensor,
+                        class_minibatch_gt: torch.Tensor) -> float:
+        """
+        Compute the regression loss of the regressor
+        Input:
+        -----
+            box_preds:              (mini_batch,4*C)
+            regression_targets:     (mini_batch,4)
+            class_minibatch_gt:     only for reference to find the corresponding bbox preds
+        Output:
+        ----
+            loss_regr:  scalar
+        """
+
+        loss_regr = 0
+        count = 0
+        sl1loss = torch.nn.SmoothL1Loss(reduction='mean')
+
+        for i in range(class_minibatch_gt.shape[0]):
+            loss_regr += sl1loss(box_preds[i][class_minibatch_gt[i]:class_minibatch_gt[i] + 4],
+                                 regression_targets[i])
+            count += 1
+
+        return loss_regr / count
+
+    def compute_loss(self, class_logits: torch.Tensor, box_preds: torch.Tensor,
+                     labels: torch.Tensor, regression_targets: torch.Tensor,
+                     lambda_coeff=1, effective_batch=150) -> tuple:
         """
         Compute the total loss of the classifier and the regressor
         Input:
         -----
-             class_logits: (total_proposals,(C+1)) (as outputted from forward, not passed from 
+             class_logits: (total_proposals,(C+1)) (as outputted from forward, not passed from
                                                     softmax so we can use CrossEntropyLoss)
              box_preds: (total_proposals,4*C)      (as outputted from forward)
              labels: (total_proposals,1)
@@ -130,15 +170,62 @@ class BoxHead(torch.nn.Module):
              loss_regr: scalar
         """
 
+        # For sampling the mini batch we can use a similar policy with the RPN but now we sample
+        # proposals with no-background ground truth and proposals with background ground truth with
+        # a ratio as close to 3:1 as possible. Again you should set a constant size for the
+        # mini-batch.
+
+        class_minibatch = torch.Tensor().to(self.device)
+        class_minibatch_gt = torch.tensor().to(self.device)
+        reg_minibatch = torch.Tensor().to(self.device)
+        reg_minibatch_gt = torch.Tensor().to(self.device)
+
+        no_bg_idx = (labels != 0).nonzero(as_tuple=False).squeeze()
+        bg_idx = (labels == 0).nonzero(as_tuple=False).squeeze()
+
+        M_no_bg = int(effective_batch / 4)
+        M_bg = effective_batch - M_no_bg
+
+        if torch.sum(labels != 0) > M_no_bg:
+            # Randomly choose M/2 anchors with positive ground truth labels.
+            rand_idx = torch.randint(no_bg_idx.size()[0], (M_no_bg,))
+            class_minibatch = class_logits[no_bg_idx[rand_idx]]
+            class_minibatch_gt = labels[no_bg_idx[rand_idx]]
+            reg_minibatch = box_preds[no_bg_idx[rand_idx]]
+            reg_minibatch_gt = regression_targets[no_bg_idx[rand_idx]]
+        else:
+            class_minibatch = class_logits[no_bg_idx]
+            class_minibatch_gt = labels[no_bg_idx]
+            reg_minibatch = box_preds[no_bg_idx]
+            reg_minibatch_gt = regression_targets[no_bg_idx]
+
+        if torch.sum(labels == 0) > M_bg:
+            rand_idx = torch.randint(bg_idx.size()[0], (M_bg,))
+            class_minibatch = torch.cat(class_logits[bg_idx[rand_idx]], dim=0)
+            class_minibatch_gt = torch.cat(labels[bg_idx[rand_idx]], dim=0)
+            reg_minibatch = torch.cat(box_preds[bg_idx[rand_idx]], dim=0)
+            reg_minibatch_gt = torch.cat(regression_targets[bg_idx[rand_idx]], dim=0)
+        else:
+            class_minibatch = torch.cat(class_logits[bg_idx], dim=0)
+            class_minibatch_gt = torch.cat(labels[bg_idx], dim=0)
+            reg_minibatch = torch.cat(box_preds[bg_idx], dim=0)
+            reg_minibatch_gt = torch.cat(regression_targets[bg_idx], dim=0)
+
+        loss_class = torch.nn.CrossEntropyLoss(class_minibatch, class_minibatch_gt)
+        loss_regr = self.regression_loss(reg_minibatch, reg_minibatch_gt)
+
+        loss = loss_class + lambda_coeff * loss_regr
+
         return loss, loss_class, loss_regr
 
-    def forward(self, feature_vectors: torch.Tensor) -> tuple:
+    def forward(self, feature_vectors: torch.Tensor, training: bool = True) -> tuple:
         """
-        Forward the pooled feature vectors through the intermediate layer and the classifier, 
+        Forward the pooled feature vectors through the intermediate layer and the classifier,
         regressor of the box head
         Input:
         -----
                feature_vectors: (total_proposals, 256*P*P)
+               training:        bool            whether the network is in training mode
         Outputs:
         -----
                class_logits: (total_proposals,(C+1)) (we assume classes are C classes plus
@@ -150,6 +237,8 @@ class BoxHead(torch.nn.Module):
 
         intermediate_out = self.intermediate(feature_vectors)
         class_logits = self.class_head(intermediate_out)
+        if not training:
+            class_logits = self.softmax(class_logits)
         box_pred = self.reg_head(intermediate_out)
 
         return class_logits, box_pred
