@@ -34,7 +34,7 @@ def pretrained_models_680(checkpoint_file, eval=True):
 if __name__ == '__main__':
 
     # Put the path were you save the given pretrained model
-    pretrained_path = 'checkpoint680.pth'
+    pretrained_path = 'model/checkpoint680.pth'
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     backbone, rpn = pretrained_models_680(pretrained_path)
 
@@ -70,7 +70,8 @@ if __name__ == '__main__':
 
     with torch.no_grad():
         for iter, batch in enumerate(test_loader, 0):
-            images = batch['images'].to(device)
+            images, *other = batch
+            images = images.to(device)
 
             # Take the features from the backbone
             backout = backbone(images)
