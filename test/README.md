@@ -1,5 +1,12 @@
 # HW4 Test Cases
 All the files can be loaded using torch.load()
+
+## Test Scripts
+All the Python test scripts are located in `scripts/`. When running test scripts, please go to the root folder and specify:
+```bash
+PYTHONPATH=src/ python test/scripts/<YOUR_SCRIPT_NAME>.py
+```
+
 ## Ground Truth
 Test Case for the create_ground_truth.
 Each test contains a dictionary with the following entries:
