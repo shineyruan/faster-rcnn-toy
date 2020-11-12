@@ -48,7 +48,7 @@ if __name__ == "__main__":
         test_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
     test_loader = test_build_loader.loader()
     train_build_loader = BuildDataLoader(
-        train_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
     train_loader = train_build_loader.loader()
 
     # Here we keep the top 20, but during training you
