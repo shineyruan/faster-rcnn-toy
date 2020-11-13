@@ -93,8 +93,8 @@ def matrix_IOU_center(boxA, boxB, device='cpu'):
     inter_y1 = torch.max(boxA[..., 1] - boxA[..., 3] / 2, boxB[..., 1] - boxB[..., 3] / 2)
     inter_x2 = torch.min(boxA[..., 0] + boxA[..., 2] / 2, boxB[..., 0] + boxB[..., 2] / 2)
     inter_y2 = torch.min(boxA[..., 1] + boxA[..., 3] / 2, boxB[..., 1] + boxB[..., 3] / 2)
-    inter = torch.maximum((inter_x2 - inter_x1), torch.zeros(inter_x2.shape).to(device)) * \
-        torch.maximum((inter_y2 - inter_y1), torch.zeros(inter_x2.shape).to(device))
+    inter = torch.max((inter_x2 - inter_x1), torch.zeros(inter_x2.shape).to(device)) * \
+        torch.max((inter_y2 - inter_y1), torch.zeros(inter_x2.shape).to(device))
     iou = inter / (boxA[..., 2] * boxA[..., 3] + boxB[..., 2] * boxB[..., 3] - inter + 1)
     return iou
 
@@ -108,9 +108,10 @@ def matrix_IOU_corner(boxA, boxB, device='cpu'):
     inter_y1 = torch.max(boxA[..., 1], boxB[..., 1])
     inter_x2 = torch.min(boxA[..., 2], boxB[..., 2])
     inter_y2 = torch.min(boxA[..., 3], boxB[..., 3])
-    inter = torch.maximum((inter_x2 - inter_x1), torch.zeros(inter_x2.shape).to(device)) * \
-        torch.maximum((inter_y2 - inter_y1), torch.zeros(inter_x2.shape).to(device))
-    iou = inter / (boxA[..., 2] * boxA[..., 3] + boxB[..., 2] * boxB[..., 3] - inter + 1)
+    inter = torch.max((inter_x2 - inter_x1), torch.zeros(inter_x2.shape).to(device)) * \
+        torch.max((inter_y2 - inter_y1), torch.zeros(inter_x2.shape).to(device))
+    iou = inter / ((boxA[..., 2] - boxA[..., 0]) * (boxA[..., 3] - boxA[..., 1]) +
+                   (boxB[..., 2] - boxB[..., 0]) * (boxB[..., 3] - boxB[..., 1]) - inter + 1)
     return iou
 
 

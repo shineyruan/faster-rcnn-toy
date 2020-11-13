@@ -24,7 +24,7 @@ class BoxHead(torch.nn.Module):
 
         self.reg_head = nn.Linear(in_features=1024, out_features=4 * self.C)
 
-    def create_ground_truth(self, proposals: list, gt_labels: list, gt_bboxes: list, device='cpu'):
+    def create_ground_truth(self, proposals: list, gt_labels: list, gt_bboxes: list):
         """
         This function assigns to each proposal either a ground truth box or the background class
         (we assume background class is 0)
@@ -43,23 +43,24 @@ class BoxHead(torch.nn.Module):
         for batch_id in range(len(gt_labels)):
             num_proposals = proposals[batch_id].shape[0]
             num_gtbboxes = gt_bboxes[batch_id].shape[0]
-            proposal_mat = proposals[batch_id].expand(num_gtbboxes, num_proposals, 4).to(device)
-            gtbbox_mat = gt_bboxes[batch_id].expand(num_proposals, num_gtbboxes, 4).transpose(1, 0, 2).to(device)
+            proposal_mat = proposals[batch_id].expand(num_gtbboxes, num_proposals, 4).to(self.device)
+            gtbbox_mat = gt_bboxes[batch_id].expand(num_proposals, num_gtbboxes, 4).to(self.device)
+            gtbbox_mat = torch.transpose(gtbbox_mat, 0, 1)
             # iou_mat: (num_gtbboxes, num_proposals)
-            iou_mat = matrix_IOU_corner(proposal_mat, gtbbox_mat, device=device)
+            iou_mat = matrix_IOU_corner(proposal_mat, gtbbox_mat, device=self.device)
 
             matched_gtbbox = torch.max(iou_mat, dim=0)
             background = matched_gtbbox.values < 0.5
 
-            proposal_labels = torch.zeros(num_proposals, 1).to(device)
+            proposal_labels = torch.zeros(num_proposals, 1).to(self.device)
             for i in range(num_proposals):
                 if not background[i]:
-                    proposal_labels[i,0] = gt_labels[batch_id][matched_gtbbox.indices[i]]
+                    proposal_labels[i, 0] = gt_labels[batch_id][matched_gtbbox.indices[i]]
             labels.append(proposal_labels)
 
-        laebls = torch.cat(labels, dim=0)
+        labels = torch.cat(labels, dim=0)
         # TODO: create regressor_target
-        return labels, regressor_target
+        return labels  # , regressor_target
 
     def MultiScaleRoiAlign(self, fpn_feat_list: list, proposals: list, P=7) -> torch.Tensor:
         """
@@ -266,4 +267,15 @@ class BoxHead(torch.nn.Module):
 
 
 if __name__ == '__main__':
-    pass
+    net = BoxHead(device='cpu', Classes=3, P=7)
+
+    # Test Ground Truth creation, testcase7 has one incorrect label because the iou of that one is 0.4999
+    for i in range(7):
+        testcase = torch.load("test/GroundTruth/ground_truth_test" + str(i) + ".pt")
+        print(testcase.keys())
+        labels = net.create_ground_truth(testcase['proposals'],
+                                         testcase['gt_labels'],
+                                         testcase['bbox'])
+        correctness = labels.type(torch.int8).reshape(-1) == testcase['labels'].type(torch.int8).reshape(-1)
+        print(labels.type(torch.int8).reshape(-1)[~correctness])
+        print(testcase['labels'].type(torch.int8).reshape(-1)[~correctness])
