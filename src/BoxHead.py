@@ -244,5 +244,19 @@ class BoxHead(torch.nn.Module):
         return class_logits, box_pred
 
 
+import os
 if __name__ == '__main__':
-    pass
+    box_head = BoxHead(device='cuda')
+
+    # ROI align test
+    roi_dir = "test/MultiScaleRoiAlign/"
+    num_test = 0
+    # load test cases
+    path = os.path.join(roi_dir, "multiscale_RoIAlign_test" + str(num_test) + ".pt")
+    fpn_feat_list = [item.cuda() for item in torch.load(path)['fpn_feat_list']]
+    proposals = [item.cuda() for item in torch.load(path)['proposals']]
+    output_feature_vectors = torch.load(path)['output_feature_vectors'].cuda()
+    feature_vectors = box_head.MultiScaleRoiAlign(fpn_feat_list, proposals)
+    print("\n----- ROI align test -----")
+    print(feature_vectors)
+    print(output_feature_vectors)
