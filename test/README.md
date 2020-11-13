@@ -2,9 +2,9 @@
 All the files can be loaded using torch.load()
 
 ## Test Scripts
-All the Python test scripts are located in `scripts/`. When running test scripts, please go to the root folder and specify:
+All the Python test scripts are located in `src/BoxHead.py`. When running test scripts, please go to the root folder and specify:
 ```bash
-PYTHONPATH=src/ python test/scripts/<YOUR_SCRIPT_NAME>.py
+python src/BoxHead.py
 ```
 
 ## Ground Truth
