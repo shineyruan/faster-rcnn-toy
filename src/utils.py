@@ -71,7 +71,46 @@ def MultiApply(func, *args, **kwargs):
 
 
 def IOU(boxA, boxB):
+    ##################################
+    # compute the IOU between the boxA, boxB boxes
+    # x_center, y_center, w, h
+    ##################################
+    inter_x1 = max(boxA[0] - boxA[2] / 2, boxB[0] - boxB[2] / 2)
+    inter_y1 = max(boxA[1] - boxA[3] / 2, boxB[1] - boxB[3] / 2)
+    inter_x2 = min(boxA[0] + boxA[2] / 2, boxB[0] + boxB[2] / 2)
+    inter_y2 = min(boxA[1] + boxA[3] / 2, boxB[1] + boxB[3] / 2)
+    inter = max((inter_x2 - inter_x1), 0) * max((inter_y2 - inter_y1), 0)
+    iou = inter / (boxA[2] * boxA[3] + boxB[2] * boxB[3] - inter + 1)
+    return iou
 
+
+def matrix_IOU_center(boxA, boxB, device='cpu'):
+    ##################################
+    # compute the IOU between the boxA, boxB boxes
+    # box: (grid_x, grid_y, 4)
+    ##################################
+    inter_x1 = torch.max(boxA[..., 0] - boxA[..., 2] / 2, boxB[..., 0] - boxB[..., 2] / 2)
+    inter_y1 = torch.max(boxA[..., 1] - boxA[..., 3] / 2, boxB[..., 1] - boxB[..., 3] / 2)
+    inter_x2 = torch.min(boxA[..., 0] + boxA[..., 2] / 2, boxB[..., 0] + boxB[..., 2] / 2)
+    inter_y2 = torch.min(boxA[..., 1] + boxA[..., 3] / 2, boxB[..., 1] + boxB[..., 3] / 2)
+    inter = torch.maximum((inter_x2 - inter_x1), torch.zeros(inter_x2.shape).to(device)) * \
+        torch.maximum((inter_y2 - inter_y1), torch.zeros(inter_x2.shape).to(device))
+    iou = inter / (boxA[..., 2] * boxA[..., 3] + boxB[..., 2] * boxB[..., 3] - inter + 1)
+    return iou
+
+
+def matrix_IOU_corner(boxA, boxB, device='cpu'):
+    ##################################
+    # compute the IOU between the boxA, boxB boxes
+    # box: (grid_x, grid_y, 4)([x1, y1, x2, y2] format)
+    ##################################
+    inter_x1 = torch.max(boxA[..., 0], boxB[..., 0])
+    inter_y1 = torch.max(boxA[..., 1], boxB[..., 1])
+    inter_x2 = torch.min(boxA[..., 2], boxB[..., 2])
+    inter_y2 = torch.min(boxA[..., 3], boxB[..., 3])
+    inter = torch.maximum((inter_x2 - inter_x1), torch.zeros(inter_x2.shape).to(device)) * \
+        torch.maximum((inter_y2 - inter_y1), torch.zeros(inter_x2.shape).to(device))
+    iou = inter / (boxA[..., 2] * boxA[..., 3] + boxB[..., 2] * boxB[..., 3] - inter + 1)
     return iou
 
 

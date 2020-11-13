@@ -3,6 +3,8 @@ import torch.nn.functional as F
 from torch import nn
 import torchvision
 
+from utils import matrix_IOU_corner
+
 
 class BoxHead(torch.nn.Module):
     def __init__(self, device='cuda', Classes=3, P=7):
@@ -13,7 +15,7 @@ class BoxHead(torch.nn.Module):
         self.P = P
         # TODO initialize BoxHead
 
-    def create_ground_truth(self, proposals, gt_labels, bbox):
+    def create_ground_truth(self, proposals: list, gt_labels: list, gt_bboxes: list, device='cpu'):
         """
         This function assigns to each proposal either a ground truth box or the background class
         (we assume background class is 0)
@@ -21,14 +23,33 @@ class BoxHead(torch.nn.Module):
         -----
             proposals: list: len(bz){(per_image_proposals, 4)}([x1, y1, x2, y2] format)
             gt_labels: list: len(bz) {(n_obj)}
-            bbox: list: len(bz){(n_obj, 4)}
+            gt_bboxes: list: len(bz){(n_obj, 4)}([x1, y1, x2, y2] format)
         Output:
         -----
             (make sure the ordering of the proposals are consistent with MultiScaleRoiAlign)
             labels: (total_proposals, 1)(the class that the proposal is assigned)
             regressor_target: (total_proposals, 4)(target encoded in the[t_x, t_y, t_w, t_h] format)
         """
+        labels = []
+        for batch_id in range(len(gt_labels)):
+            num_proposals = proposals[batch_id].shape[0]
+            num_gtbboxes = gt_bboxes[batch_id].shape[0]
+            proposal_mat = proposals[batch_id].expand(num_gtbboxes, num_proposals, 4).to(device)
+            gtbbox_mat = gt_bboxes[batch_id].expand(num_proposals, num_gtbboxes, 4).transpose(1, 0, 2).to(device)
+            # iou_mat: (num_gtbboxes, num_proposals)
+            iou_mat = matrix_IOU_corner(proposal_mat, gtbbox_mat, device=device)
 
+            matched_gtbbox = torch.max(iou_mat, dim=0)
+            background = matched_gtbbox.values < 0.5
+
+            proposal_labels = torch.zeros(num_proposals, 1).to(device)
+            for i in range(num_proposals):
+                if not background[i]:
+                    proposal_labels[i,0] = gt_labels[batch_id][matched_gtbbox.indices[i]]
+            labels.append(proposal_labels)
+
+        laebls = torch.cat(labels, dim=0)
+        # TODO: create regressor_target
         return labels, regressor_target
 
     def MultiScaleRoiAlign(self, fpn_feat_list: list, proposals: list, P=7) -> torch.Tensor:
