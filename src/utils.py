@@ -115,6 +115,24 @@ def matrix_IOU_corner(boxA, boxB, device='cpu'):
     return iou
 
 
+def corner_to_center(bbox):
+    # bbox: (4, ) [x1, y1, x2, y2] format
+    # output: (4, ) [x, y, w, h] format
+    return torch.tensor([(bbox[0] + bbox[2]) / 2,
+                         (bbox[1] + bbox[3]) / 2,
+                         (bbox[2] - bbox[0]),
+                         (bbox[3] - bbox[1])])
+
+
+def center_to_corner(bbox):
+    # bbox: (4, ) [x, y, w, h] format
+    # output: (4, ) [x1, y1, x2, y2] format
+    return torch.tensor([bbox[0] - bbox[2] / 2,
+                         bbox[1] - bbox[3] / 2,
+                         bbox[0] + bbox[2] / 2,
+                         bbox[1] + bbox[3] / 2])
+
+
 # This function decodes the output of the box head that are given in the [t_x,t_y,t_w,t_h] format
 # into box coordinates where it return the upper left and lower right corner of the bbox
 # Input:
@@ -122,6 +140,8 @@ def matrix_IOU_corner(boxA, boxB, device='cpu'):
 #       flatten_proposals: (total_proposals,4) ([x1,y1,x2,y2] format)
 # Output:
 #       box: (total_proposals,4) ([x1,y1,x2,y2] format)
+
+
 def output_decodingd(regressed_boxes_t, flatten_proposals, device='cpu'):
 
     return box
