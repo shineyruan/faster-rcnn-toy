@@ -71,8 +71,66 @@ def MultiApply(func, *args, **kwargs):
 
 
 def IOU(boxA, boxB):
-
+    ##################################
+    # compute the IOU between the boxA, boxB boxes
+    # x_center, y_center, w, h
+    ##################################
+    inter_x1 = max(boxA[0] - boxA[2] / 2, boxB[0] - boxB[2] / 2)
+    inter_y1 = max(boxA[1] - boxA[3] / 2, boxB[1] - boxB[3] / 2)
+    inter_x2 = min(boxA[0] + boxA[2] / 2, boxB[0] + boxB[2] / 2)
+    inter_y2 = min(boxA[1] + boxA[3] / 2, boxB[1] + boxB[3] / 2)
+    inter = max((inter_x2 - inter_x1), 0) * max((inter_y2 - inter_y1), 0)
+    iou = inter / (boxA[2] * boxA[3] + boxB[2] * boxB[3] - inter + 1)
     return iou
+
+
+def matrix_IOU_center(boxA, boxB, device='cpu'):
+    ##################################
+    # compute the IOU between the boxA, boxB boxes
+    # box: (grid_x, grid_y, 4)
+    ##################################
+    inter_x1 = torch.max(boxA[..., 0] - boxA[..., 2] / 2, boxB[..., 0] - boxB[..., 2] / 2)
+    inter_y1 = torch.max(boxA[..., 1] - boxA[..., 3] / 2, boxB[..., 1] - boxB[..., 3] / 2)
+    inter_x2 = torch.min(boxA[..., 0] + boxA[..., 2] / 2, boxB[..., 0] + boxB[..., 2] / 2)
+    inter_y2 = torch.min(boxA[..., 1] + boxA[..., 3] / 2, boxB[..., 1] + boxB[..., 3] / 2)
+    inter = torch.max((inter_x2 - inter_x1), torch.zeros(inter_x2.shape).to(device)) * \
+        torch.max((inter_y2 - inter_y1), torch.zeros(inter_x2.shape).to(device))
+    iou = inter / (boxA[..., 2] * boxA[..., 3] + boxB[..., 2] * boxB[..., 3] - inter + 1)
+    return iou
+
+
+def matrix_IOU_corner(boxA, boxB, device='cpu'):
+    ##################################
+    # compute the IOU between the boxA, boxB boxes
+    # box: (grid_x, grid_y, 4)([x1, y1, x2, y2] format)
+    ##################################
+    inter_x1 = torch.max(boxA[..., 0], boxB[..., 0])
+    inter_y1 = torch.max(boxA[..., 1], boxB[..., 1])
+    inter_x2 = torch.min(boxA[..., 2], boxB[..., 2])
+    inter_y2 = torch.min(boxA[..., 3], boxB[..., 3])
+    inter = torch.max((inter_x2 - inter_x1), torch.zeros(inter_x2.shape).to(device)) * \
+        torch.max((inter_y2 - inter_y1), torch.zeros(inter_x2.shape).to(device))
+    iou = inter / ((boxA[..., 2] - boxA[..., 0]) * (boxA[..., 3] - boxA[..., 1]) +
+                   (boxB[..., 2] - boxB[..., 0]) * (boxB[..., 3] - boxB[..., 1]) - inter + 1)
+    return iou
+
+
+def corner_to_center(bbox):
+    # bbox: (4, ) [x1, y1, x2, y2] format
+    # output: (4, ) [x, y, w, h] format
+    return torch.tensor([(bbox[0] + bbox[2]) / 2,
+                         (bbox[1] + bbox[3]) / 2,
+                         (bbox[2] - bbox[0]),
+                         (bbox[3] - bbox[1])])
+
+
+def center_to_corner(bbox):
+    # bbox: (4, ) [x, y, w, h] format
+    # output: (4, ) [x1, y1, x2, y2] format
+    return torch.tensor([bbox[0] - bbox[2] / 2,
+                         bbox[1] - bbox[3] / 2,
+                         bbox[0] + bbox[2] / 2,
+                         bbox[1] + bbox[3] / 2])
 
 
 # This function decodes the output of the box head that are given in the [t_x,t_y,t_w,t_h] format
@@ -82,6 +140,8 @@ def IOU(boxA, boxB):
 #       flatten_proposals: (total_proposals,4) ([x1,y1,x2,y2] format)
 # Output:
 #       box: (total_proposals,4) ([x1,y1,x2,y2] format)
+
+
 def output_decodingd(regressed_boxes_t, flatten_proposals, device='cpu'):
 
     return box

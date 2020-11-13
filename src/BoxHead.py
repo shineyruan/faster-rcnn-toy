@@ -3,6 +3,8 @@ import torch.nn.functional as F
 from torch import nn
 import torchvision
 
+from utils import matrix_IOU_corner, corner_to_center, center_to_corner
+
 
 class BoxHead(torch.nn.Module):
     def __init__(self, device='cuda', Classes=3, P=7):
@@ -22,7 +24,7 @@ class BoxHead(torch.nn.Module):
 
         self.reg_head = nn.Linear(in_features=1024, out_features=4 * self.C)
 
-    def create_ground_truth(self, proposals, gt_labels, bbox):
+    def create_ground_truth(self, proposals: list, gt_labels: list, gt_bboxes: list):
         """
         This function assigns to each proposal either a ground truth box or the background class
         (we assume background class is 0)
@@ -30,13 +32,46 @@ class BoxHead(torch.nn.Module):
         -----
             proposals: list: len(bz){(per_image_proposals, 4)}([x1, y1, x2, y2] format)
             gt_labels: list: len(bz) {(n_obj)}
-            bbox: list: len(bz){(n_obj, 4)}
+            gt_bboxes: list: len(bz){(n_obj, 4)}([x1, y1, x2, y2] format)
         Output:
         -----
             (make sure the ordering of the proposals are consistent with MultiScaleRoiAlign)
             labels: (total_proposals, 1)(the class that the proposal is assigned)
             regressor_target: (total_proposals, 4)(target encoded in the[t_x, t_y, t_w, t_h] format)
         """
+        labels = []
+        regressor_target = []
+        for batch_id in range(len(gt_labels)):
+            num_proposals = proposals[batch_id].shape[0]
+            num_gtbboxes = gt_bboxes[batch_id].shape[0]
+            proposal_mat = proposals[batch_id].expand(
+                num_gtbboxes, num_proposals, 4).to(self.device)
+            gtbbox_mat = gt_bboxes[batch_id].expand(num_proposals, num_gtbboxes, 4).to(self.device)
+            gtbbox_mat = torch.transpose(gtbbox_mat, 0, 1)
+            # iou_mat: (num_gtbboxes, num_proposals)
+            iou_mat = matrix_IOU_corner(proposal_mat, gtbbox_mat, device=self.device)
+
+            matched_gtbbox = torch.max(iou_mat, dim=0)
+            background = matched_gtbbox.values < 0.5
+
+            proposal_labels = torch.zeros(num_proposals, 1).to(self.device)
+            regressor = torch.zeros(num_proposals, 4).to(self.device)
+            for i in range(num_proposals):
+                if not background[i]:
+                    proposal_labels[i, 0] = gt_labels[batch_id][matched_gtbbox.indices[i]]
+
+                gt_bbox_center = corner_to_center(gt_bboxes[batch_id][matched_gtbbox.indices[i]])
+                proposal_center = corner_to_center(proposals[batch_id][i])
+                regressor[i, 0] = (gt_bbox_center[0] - proposal_center[0]) / proposal_center[2]
+                regressor[i, 1] = (gt_bbox_center[1] - proposal_center[1]) / proposal_center[3]
+                regressor[i, 2] = torch.log(gt_bbox_center[2] / proposal_center[2])
+                regressor[i, 3] = torch.log(gt_bbox_center[3] / proposal_center[3])
+
+            labels.append(proposal_labels)
+            regressor_target.append(regressor)
+
+        labels = torch.cat(labels, dim=0)
+        regressor_target = torch.cat(regressor_target, dim=0)
 
         return labels, regressor_target
 
@@ -246,7 +281,28 @@ class BoxHead(torch.nn.Module):
 
 import os
 if __name__ == '__main__':
-    box_head = BoxHead(device='cuda')
+    net = BoxHead(device='cuda', Classes=3, P=7)
+
+    # Test Ground Truth creation
+    # testcase 7 has one incorrect label because the iou of that one is 0.4999
+    # TODO: testcase 3 has many incorrect regressor targets
+    for i in range(7):
+        print("-------------------------", str(i), "-------------------------")
+        testcase = torch.load("test/GroundTruth/ground_truth_test" + str(i) + ".pt")
+        print(testcase.keys())
+        print(len(testcase['bbox']))
+        labels, regressor_target = net.create_ground_truth(testcase['proposals'],
+                                                           testcase['gt_labels'],
+                                                           testcase['bbox'])
+        correctness = labels.type(
+            torch.int8).reshape(-1) == testcase['labels'].type(torch.int8).reshape(-1)
+        print(labels.type(torch.int8).reshape(-1)[~correctness])
+        print(testcase['labels'].type(torch.int8).reshape(-1)[~correctness])
+        correctness = torch.abs(testcase['regressor_target'] - regressor_target) < 0.01
+        # print((~correctness).nonzero())
+        print(torch.abs(testcase['regressor_target'] - regressor_target)[~correctness])
+        # print(testcase['regressor_target'][~correctness])
+        # print(regressor_target[~correctness])
 
     # ROI align test
     roi_dir = "test/MultiScaleRoiAlign/"
@@ -256,7 +312,7 @@ if __name__ == '__main__':
     fpn_feat_list = [item.cuda() for item in torch.load(path)['fpn_feat_list']]
     proposals = [item.cuda() for item in torch.load(path)['proposals']]
     output_feature_vectors = torch.load(path)['output_feature_vectors'].cuda()
-    feature_vectors = box_head.MultiScaleRoiAlign(fpn_feat_list, proposals)
+    feature_vectors = net.MultiScaleRoiAlign(fpn_feat_list, proposals)
     print("\n----- ROI align test -----")
     print(feature_vectors)
     print(output_feature_vectors)
