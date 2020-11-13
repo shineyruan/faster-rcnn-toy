@@ -75,7 +75,8 @@ class BoxHead(torch.nn.Module):
 
         return labels, regressor_target
 
-    def MultiScaleRoiAlign(self, fpn_feat_list: list, proposals: list, P=7) -> torch.Tensor:
+    def MultiScaleRoiAlign(self, fpn_feat_list: list, proposals: list,
+                           P: int = 7, img_size: tuple = (800, 1088)) -> torch.Tensor:
         """
         This function for each proposal finds the appropriate feature map to sample and using
         RoIAlign it samples a (256,P,P) feature map. This feature map is then flattened into a
@@ -112,8 +113,16 @@ class BoxHead(torch.nn.Module):
 
             for i, item in enumerate(k):
                 # get ROI align
+                featmap_size = fpn_feat_list[item][batch_i].shape[-2:]
+                bbox = proposals[batch_i][i]
+                # rescale bbox region to featmap size
+                x_idx = torch.Tensor([0, 2]).type(torch.long)
+                y_idx = torch.Tensor([1, 3]).type(torch.long)
+                bbox[x_idx] = bbox[x_idx] * featmap_size[0] / img_size[0]
+                bbox[y_idx] = bbox[y_idx] * featmap_size[1] / img_size[1]
+
                 roi_out = torchvision.ops.roi_align(fpn_feat_list[item][batch_i].unsqueeze(0),
-                                                    [proposals[batch_i][i].unsqueeze(0)],
+                                                    [bbox.unsqueeze(0)],
                                                     output_size=(P, P))
                 feature_vectors.append(torch.squeeze(roi_out))
 
@@ -304,7 +313,8 @@ if __name__ == '__main__':
         # print(testcase['regressor_target'][~correctness])
         # print(regressor_target[~correctness])
 
-    # ROI align test
+    # Test ROI align
+    # TODO: test 2 & 3 still have differences ONLY in the last line output; reasons unknown
     roi_dir = "test/MultiScaleRoiAlign/"
     num_test = 0
     # load test cases
