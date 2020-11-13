@@ -326,3 +326,5 @@ if __name__ == '__main__':
     print("\n----- ROI align test -----")
     print(feature_vectors)
     print(output_feature_vectors)
+
+    # Test Loss
