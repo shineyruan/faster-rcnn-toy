@@ -165,8 +165,8 @@ class BoxHead(torch.nn.Module):
         ----
             loss_class:  scalar
         """
-
-        return torch.nn.CrossEntropyLoss(class_minibatch, class_minibatch_gt)
+        ceLoss_fn = nn.CrossEntropyLoss()
+        return ceLoss_fn(class_minibatch, class_minibatch_gt)
 
     def regression_loss(self, box_preds: torch.Tensor, regression_targets: torch.Tensor,
                         class_minibatch_gt: torch.Tensor) -> float:
@@ -184,18 +184,23 @@ class BoxHead(torch.nn.Module):
 
         loss_regr = 0
         count = 0
-        sl1loss = torch.nn.SmoothL1Loss(reduction='mean')
+        sl1loss = nn.SmoothL1Loss(reduction='sum')
 
         for i in range(class_minibatch_gt.shape[0]):
-            loss_regr += sl1loss(box_preds[i][class_minibatch_gt[i]:class_minibatch_gt[i] + 4],
-                                 regression_targets[i])
+            if class_minibatch_gt[i] > 0:
+                label = class_minibatch_gt[i] - 1
+                pred = box_preds[i][4 * label:4 * label + 4]
+                target = regression_targets[i]
+                loss_regr += sl1loss(pred, target)
             count += 1
 
         return loss_regr / count
 
     def compute_loss(self, class_logits: torch.Tensor, box_preds: torch.Tensor,
                      labels: torch.Tensor, regression_targets: torch.Tensor,
-                     lambda_coeff=1, effective_batch=150) -> tuple:
+                     lambda_coeff=1, effective_batch=150,
+                     random_permutation_foreground=None,
+                     random_permutation_background=None) -> tuple:
         """
         Compute the total loss of the classifier and the regressor
         Input:
@@ -219,44 +224,65 @@ class BoxHead(torch.nn.Module):
         # a ratio as close to 3:1 as possible. Again you should set a constant size for the
         # mini-batch.
 
-        class_minibatch = torch.Tensor().to(self.device)
-        class_minibatch_gt = torch.tensor().to(self.device)
-        reg_minibatch = torch.Tensor().to(self.device)
-        reg_minibatch_gt = torch.Tensor().to(self.device)
+        class_minibatch = torch.Tensor([]).to(self.device)
+        class_minibatch_gt = torch.tensor([]).to(self.device)
+        reg_minibatch = torch.Tensor([]).to(self.device)
+        reg_minibatch_gt = torch.Tensor([]).to(self.device)
 
-        no_bg_idx = (labels != 0).nonzero(as_tuple=False).squeeze()
+        no_bg_idx = (labels > 0).nonzero(as_tuple=False).squeeze()
         bg_idx = (labels == 0).nonzero(as_tuple=False).squeeze()
 
-        M_no_bg = int(effective_batch / 4)
-        M_bg = effective_batch - M_no_bg
+        if random_permutation_foreground is None and random_permutation_background is None:
+            M_no_bg = int(effective_batch / 4)
+            M_bg = effective_batch - M_no_bg
 
-        if torch.sum(labels != 0) > M_no_bg:
-            # Randomly choose M/2 anchors with positive ground truth labels.
-            rand_idx = torch.randint(no_bg_idx.size()[0], (M_no_bg,))
-            class_minibatch = class_logits[no_bg_idx[rand_idx]]
-            class_minibatch_gt = labels[no_bg_idx[rand_idx]]
-            reg_minibatch = box_preds[no_bg_idx[rand_idx]]
-            reg_minibatch_gt = regression_targets[no_bg_idx[rand_idx]]
+            if torch.sum(labels != 0) > M_no_bg:
+                # Randomly choose M/2 anchors with positive ground truth labels.
+                rand_idx = torch.randint(no_bg_idx.size()[0], (M_no_bg,))
+                class_minibatch = class_logits[no_bg_idx[rand_idx]]
+                class_minibatch_gt = labels[no_bg_idx[rand_idx]]
+                reg_minibatch = box_preds[no_bg_idx[rand_idx]]
+                reg_minibatch_gt = regression_targets[no_bg_idx[rand_idx]]
+            else:
+                class_minibatch = class_logits[no_bg_idx]
+                class_minibatch_gt = labels[no_bg_idx]
+                reg_minibatch = box_preds[no_bg_idx]
+                reg_minibatch_gt = regression_targets[no_bg_idx]
+
+            if torch.sum(labels == 0) > M_bg:
+                rand_idx = torch.randint(bg_idx.size()[0], (M_bg,))
+                class_minibatch = torch.cat(
+                    [class_minibatch, class_logits[bg_idx[rand_idx]]], dim=0)
+                class_minibatch_gt = torch.cat(
+                    [class_minibatch_gt, labels[bg_idx[rand_idx]]], dim=0)
+                reg_minibatch = torch.cat([reg_minibatch, box_preds[bg_idx[rand_idx]]], dim=0)
+                reg_minibatch_gt = torch.cat(
+                    [reg_minibatch_gt, regression_targets[bg_idx[rand_idx]]], dim=0)
+            else:
+                class_minibatch = torch.cat([class_minibatch, class_logits[bg_idx]], dim=0)
+                class_minibatch_gt = torch.cat([class_minibatch_gt, labels[bg_idx]], dim=0)
+                reg_minibatch = torch.cat([reg_minibatch, box_preds[bg_idx]], dim=0)
+                reg_minibatch_gt = torch.cat([reg_minibatch_gt, regression_targets[bg_idx]], dim=0)
+
         else:
-            class_minibatch = class_logits[no_bg_idx]
-            class_minibatch_gt = labels[no_bg_idx]
-            reg_minibatch = box_preds[no_bg_idx]
-            reg_minibatch_gt = regression_targets[no_bg_idx]
+            class_minibatch = class_logits[no_bg_idx][random_permutation_foreground]
+            class_minibatch_gt = labels[no_bg_idx][random_permutation_foreground]
+            reg_minibatch = box_preds[no_bg_idx][random_permutation_foreground]
+            reg_minibatch_gt = regression_targets[no_bg_idx][random_permutation_foreground]
 
-        if torch.sum(labels == 0) > M_bg:
-            rand_idx = torch.randint(bg_idx.size()[0], (M_bg,))
-            class_minibatch = torch.cat(class_logits[bg_idx[rand_idx]], dim=0)
-            class_minibatch_gt = torch.cat(labels[bg_idx[rand_idx]], dim=0)
-            reg_minibatch = torch.cat(box_preds[bg_idx[rand_idx]], dim=0)
-            reg_minibatch_gt = torch.cat(regression_targets[bg_idx[rand_idx]], dim=0)
-        else:
-            class_minibatch = torch.cat(class_logits[bg_idx], dim=0)
-            class_minibatch_gt = torch.cat(labels[bg_idx], dim=0)
-            reg_minibatch = torch.cat(box_preds[bg_idx], dim=0)
-            reg_minibatch_gt = torch.cat(regression_targets[bg_idx], dim=0)
+            class_minibatch = torch.cat(
+                [class_minibatch, class_logits[bg_idx][random_permutation_background]], dim=0)
+            class_minibatch_gt = torch.cat(
+                [class_minibatch_gt, labels[bg_idx][random_permutation_background]], dim=0)
+            reg_minibatch = torch.cat(
+                [reg_minibatch, box_preds[bg_idx][random_permutation_background]], dim=0)
+            reg_minibatch_gt = torch.cat(
+                [reg_minibatch_gt, regression_targets[bg_idx][random_permutation_background]], dim=0)
 
-        loss_class = torch.nn.CrossEntropyLoss(class_minibatch, class_minibatch_gt)
-        loss_regr = self.regression_loss(reg_minibatch, reg_minibatch_gt)
+        class_minibatch_gt = class_minibatch_gt.type(torch.long)
+
+        loss_class = self.classifier_loss(class_minibatch, class_minibatch_gt)
+        loss_regr = self.regression_loss(reg_minibatch, reg_minibatch_gt, class_minibatch_gt)
 
         loss = loss_class + lambda_coeff * loss_regr
 
@@ -328,3 +354,28 @@ if __name__ == '__main__':
     print(output_feature_vectors)
 
     # Test Loss
+    loss_dir = "test/Loss/"
+    for i in range(7):
+        print("\n----- Loss Align Test {} -----".format(i))
+        path = os.path.join(loss_dir, "loss_test" + str(i) + ".pt")
+        class_logits = torch.load(path)['clas_logits']
+        bbox_preds = torch.load(path)['box_preds']
+        labels = torch.load(path)['labels']
+        regression_targets = torch.load(path)['regression_targets']
+        effective_batch = torch.load(path)['effective_batch']
+        random_permutation_foreground = torch.load(path)['random_permutation_foreground']
+        random_permutation_background = torch.load(path)['random_permutation_background']
+        loss_class_gt = torch.load(path)['loss_clas']
+        loss_reg_gt = torch.load(path)['loss_reg']
+
+        _, loss_class, loss_reg = \
+            net.compute_loss(class_logits, bbox_preds,
+                             labels, regression_targets,
+                             effective_batch=effective_batch,
+                             random_permutation_foreground=random_permutation_foreground,
+                             random_permutation_background=random_permutation_background)
+
+        print("loss_class_gt", loss_class_gt)
+        print("loss_class   ", loss_class)
+        print("loss_reg_gt  ", loss_reg_gt)
+        print("loss_reg     ", loss_reg)
