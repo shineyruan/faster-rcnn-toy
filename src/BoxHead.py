@@ -162,7 +162,7 @@ class BoxHead(torch.nn.Module):
             loss_regr:  scalar
         """
 
-        loss_regr = 0
+        loss_regr = torch.tensor(0.0).to(self.device)
         count = 0
         sl1loss = nn.SmoothL1Loss(reduction='sum')
 
@@ -179,8 +179,8 @@ class BoxHead(torch.nn.Module):
     def compute_loss(self, class_logits: torch.Tensor, box_preds: torch.Tensor,
                      labels: torch.Tensor, regression_targets: torch.Tensor,
                      lambda_coeff=1, effective_batch=150,
-                     random_permutation_foreground=None,
-                     random_permutation_background=None) -> tuple:
+                     rand_perm_fg=None,
+                     rand_perm_bg=None) -> tuple:
         """
         Compute the total loss of the classifier and the regressor
         Input:
@@ -204,6 +204,8 @@ class BoxHead(torch.nn.Module):
         # a ratio as close to 3:1 as possible. Again you should set a constant size for the
         # mini-batch.
 
+        assert class_logits.shape[-1] == self.C + 1
+
         class_minibatch = torch.Tensor([]).to(self.device)
         class_minibatch_gt = torch.tensor([]).to(self.device)
         reg_minibatch = torch.Tensor([]).to(self.device)
@@ -212,52 +214,81 @@ class BoxHead(torch.nn.Module):
         no_bg_idx = (labels.T.squeeze() > 0).nonzero(as_tuple=False).squeeze()
         bg_idx = (labels.T.squeeze() == 0).nonzero(as_tuple=False).squeeze()
 
-        if random_permutation_foreground is None and random_permutation_background is None:
-            M_no_bg = int(effective_batch / 4)
-            M_bg = effective_batch - M_no_bg
+        if rand_perm_fg is None and rand_perm_bg is None:
+            M_bg = int(effective_batch / 4)
+            M_no_bg = effective_batch - M_bg
 
             if torch.sum(labels != 0) > M_no_bg:
                 # Randomly choose M/2 anchors with positive ground truth labels.
                 rand_idx = torch.randint(no_bg_idx.size()[0], (M_no_bg,))
-                class_minibatch = class_logits[no_bg_idx[rand_idx]]
-                class_minibatch_gt = labels[no_bg_idx[rand_idx]]
-                reg_minibatch = box_preds[no_bg_idx[rand_idx]]
-                reg_minibatch_gt = regression_targets[no_bg_idx[rand_idx]]
+                class_minibatch = class_logits[no_bg_idx[rand_idx]].reshape(-1, self.C + 1)
+                class_minibatch_gt = labels[no_bg_idx[rand_idx]].reshape(-1, 1)
+                reg_minibatch = box_preds[no_bg_idx[rand_idx]].reshape(-1, 4 * self.C)
+                reg_minibatch_gt = regression_targets[no_bg_idx[rand_idx]].reshape(-1, 4)
             else:
-                class_minibatch = class_logits[no_bg_idx]
-                class_minibatch_gt = labels[no_bg_idx]
-                reg_minibatch = box_preds[no_bg_idx]
-                reg_minibatch_gt = regression_targets[no_bg_idx]
+                class_minibatch = class_logits[no_bg_idx].reshape(-1, self.C + 1)
+                class_minibatch_gt = labels[no_bg_idx].reshape(-1, 1)
+                reg_minibatch = box_preds[no_bg_idx].reshape(-1, 4 * self.C)
+                reg_minibatch_gt = regression_targets[no_bg_idx].reshape(-1, 4)
 
             if torch.sum(labels == 0) > M_bg:
                 rand_idx = torch.randint(bg_idx.size()[0], (M_bg,))
                 class_minibatch = torch.cat(
-                    [class_minibatch, class_logits[bg_idx[rand_idx]]], dim=0)
+                    [class_minibatch,
+                     class_logits[bg_idx[rand_idx]].reshape(-1, self.C + 1)],
+                    dim=0)
                 class_minibatch_gt = torch.cat(
-                    [class_minibatch_gt, labels[bg_idx[rand_idx]]], dim=0)
-                reg_minibatch = torch.cat([reg_minibatch, box_preds[bg_idx[rand_idx]]], dim=0)
+                    [class_minibatch_gt,
+                     labels[bg_idx[rand_idx]].reshape(-1, 1)],
+                    dim=0)
+                reg_minibatch = torch.cat(
+                    [reg_minibatch,
+                     box_preds[bg_idx[rand_idx]].reshape(-1, 4 * self.C)],
+                    dim=0)
                 reg_minibatch_gt = torch.cat(
-                    [reg_minibatch_gt, regression_targets[bg_idx[rand_idx]]], dim=0)
+                    [reg_minibatch_gt,
+                     regression_targets[bg_idx[rand_idx]].reshape(-1, 4)],
+                    dim=0)
             else:
-                class_minibatch = torch.cat([class_minibatch, class_logits[bg_idx]], dim=0)
-                class_minibatch_gt = torch.cat([class_minibatch_gt, labels[bg_idx]], dim=0)
-                reg_minibatch = torch.cat([reg_minibatch, box_preds[bg_idx]], dim=0)
-                reg_minibatch_gt = torch.cat([reg_minibatch_gt, regression_targets[bg_idx]], dim=0)
+                class_minibatch = torch.cat(
+                    [class_minibatch,
+                     class_logits[bg_idx].reshape(-1, self.C + 1)],
+                    dim=0)
+                class_minibatch_gt = torch.cat(
+                    [class_minibatch_gt,
+                     labels[bg_idx].reshape(-1, 1)],
+                    dim=0)
+                reg_minibatch = torch.cat(
+                    [reg_minibatch,
+                     box_preds[bg_idx].reshape(-1, 4 * self.C)],
+                    dim=0)
+                reg_minibatch_gt = torch.cat(
+                    [reg_minibatch_gt,
+                     regression_targets[bg_idx].reshape(-1, 4)],
+                    dim=0)
 
         else:
-            class_minibatch = class_logits[no_bg_idx][random_permutation_foreground]
-            class_minibatch_gt = labels[no_bg_idx][random_permutation_foreground]
-            reg_minibatch = box_preds[no_bg_idx][random_permutation_foreground]
-            reg_minibatch_gt = regression_targets[no_bg_idx][random_permutation_foreground]
+            class_minibatch = class_logits[no_bg_idx][rand_perm_fg].reshape(-1, self.C + 1)
+            class_minibatch_gt = labels[no_bg_idx][rand_perm_fg].reshape(-1, 1)
+            reg_minibatch = box_preds[no_bg_idx][rand_perm_fg].reshape(-1, 4 * self.C)
+            reg_minibatch_gt = regression_targets[no_bg_idx][rand_perm_fg].reshape(-1, 4)
 
             class_minibatch = torch.cat(
-                [class_minibatch, class_logits[bg_idx][random_permutation_background]], dim=0)
+                [class_minibatch,
+                 class_logits[bg_idx][rand_perm_bg].reshape(-1, self.C + 1)],
+                dim=0)
             class_minibatch_gt = torch.cat(
-                [class_minibatch_gt, labels[bg_idx][random_permutation_background]], dim=0)
+                [class_minibatch_gt,
+                 labels[bg_idx][rand_perm_bg].reshape(-1, 1)],
+                dim=0)
             reg_minibatch = torch.cat(
-                [reg_minibatch, box_preds[bg_idx][random_permutation_background]], dim=0)
+                [reg_minibatch,
+                 box_preds[bg_idx][rand_perm_bg].reshape(-1, 4 * self.C)],
+                dim=0)
             reg_minibatch_gt = torch.cat(
-                [reg_minibatch_gt, regression_targets[bg_idx][random_permutation_background]], dim=0)
+                [reg_minibatch_gt,
+                 regression_targets[bg_idx][rand_perm_bg].reshape(-1, 4)],
+                dim=0)
 
         class_minibatch_gt = class_minibatch_gt.T.squeeze().type(torch.long)
 
@@ -298,43 +329,43 @@ import os
 if __name__ == '__main__':
     net = BoxHead(device='cuda', Classes=3, P=7)
 
-    # Test Ground Truth creation
-    # testcase 7 has one incorrect label because the iou of that one is 0.4999
-    # testcase 3 has many incorrect regressor targets when running on cpu
-    #       but no error when running on cuda
-    for i in range(7):
-        print("-------------------------", str(i), "-------------------------")
-        testcase = torch.load("test/GroundTruth/ground_truth_test" + str(i) + ".pt")
-        print(testcase.keys())
-        print(len(testcase['bbox']))
-        labels, regressor_target = net.create_ground_truth(testcase['proposals'],
-                                                           testcase['gt_labels'],
-                                                           testcase['bbox'])
-        correctness = labels.cpu().type(
-            torch.int8).reshape(-1) == testcase['labels'].type(torch.int8).reshape(-1)
-        print(labels.type(torch.int8).reshape(-1)[~correctness])
-        print(testcase['labels'].type(torch.int8).reshape(-1)[~correctness])
-        correctness = torch.abs(testcase['regressor_target'] - regressor_target.cpu()) < 0.01
-        # print((~correctness).nonzero())
-        print(torch.abs(testcase['regressor_target'] - regressor_target.cpu())[~correctness])
-        # print(testcase['regressor_target'][~correctness])
-        # print(regressor_target[~correctness])
+    # # Test Ground Truth creation
+    # # testcase 7 has one incorrect label because the iou of that one is 0.4999
+    # # testcase 3 has many incorrect regressor targets when running on cpu
+    # #       but no error when running on cuda
+    # for i in range(7):
+    #     print("-------------------------", str(i), "-------------------------")
+    #     testcase = torch.load("test/GroundTruth/ground_truth_test" + str(i) + ".pt")
+    #     print(testcase.keys())
+    #     print(len(testcase['bbox']))
+    #     labels, regressor_target = net.create_ground_truth(testcase['proposals'],
+    #                                                        testcase['gt_labels'],
+    #                                                        testcase['bbox'])
+    #     correctness = labels.cpu().type(
+    #         torch.int8).reshape(-1) == testcase['labels'].type(torch.int8).reshape(-1)
+    #     print(labels.type(torch.int8).reshape(-1)[~correctness])
+    #     print(testcase['labels'].type(torch.int8).reshape(-1)[~correctness])
+    #     correctness = torch.abs(testcase['regressor_target'] - regressor_target.cpu()) < 0.01
+    #     # print((~correctness).nonzero())
+    #     print(torch.abs(testcase['regressor_target'] - regressor_target.cpu())[~correctness])
+    #     # print(testcase['regressor_target'][~correctness])
+    #     # print(regressor_target[~correctness])
 
-    # Test ROI align
-    roi_dir = "test/MultiScaleRoiAlign/"
-    for num_test in range(4):
-        # load test cases
-        path = os.path.join(roi_dir, "multiscale_RoIAlign_test" + str(num_test) + ".pt")
-        fpn_feat_list = [item.cuda() for item in torch.load(path)['fpn_feat_list']]
-        proposals = [item.cuda() for item in torch.load(path)['proposals']]
-        output_feature_vectors = torch.load(path)['output_feature_vectors'].cuda()
-        feature_vectors = net.MultiScaleRoiAlign(fpn_feat_list, proposals)
-        print("\n----- ROI align test {} -----".format(num_test))
-        print(feature_vectors)
-        print(output_feature_vectors)
-        correctness = torch.abs(feature_vectors - output_feature_vectors) < 0.01
-        difference = torch.abs(feature_vectors - output_feature_vectors)[~correctness]
-        print(difference, difference.shape)
+    # # Test ROI align
+    # roi_dir = "test/MultiScaleRoiAlign/"
+    # for num_test in range(4):
+    #     # load test cases
+    #     path = os.path.join(roi_dir, "multiscale_RoIAlign_test" + str(num_test) + ".pt")
+    #     fpn_feat_list = [item.cuda() for item in torch.load(path)['fpn_feat_list']]
+    #     proposals = [item.cuda() for item in torch.load(path)['proposals']]
+    #     output_feature_vectors = torch.load(path)['output_feature_vectors'].cuda()
+    #     feature_vectors = net.MultiScaleRoiAlign(fpn_feat_list, proposals)
+    #     print("\n----- ROI align test {} -----".format(num_test))
+    #     print(feature_vectors)
+    #     print(output_feature_vectors)
+    #     correctness = torch.abs(feature_vectors - output_feature_vectors) < 0.01
+    #     difference = torch.abs(feature_vectors - output_feature_vectors)[~correctness]
+    #     print(difference, difference.shape)
 
     # Test Loss
     loss_dir = "test/Loss/"
@@ -355,10 +386,14 @@ if __name__ == '__main__':
             net.compute_loss(class_logits, bbox_preds,
                              labels, regression_targets,
                              effective_batch=effective_batch,
-                             random_permutation_foreground=random_permutation_foreground,
-                             random_permutation_background=random_permutation_background)
+                             rand_perm_fg=random_permutation_foreground,
+                             rand_perm_bg=random_permutation_background)
 
         print("loss_class_gt", loss_class_gt)
         print("loss_class   ", loss_class)
         print("loss_reg_gt  ", loss_reg_gt)
         print("loss_reg     ", loss_reg)
+
+        correctness = torch.abs(loss_class - loss_class_gt) < 0.01
+        difference = torch.abs(loss_class - loss_class_gt)[~correctness]
+        print(difference, difference.shape)
