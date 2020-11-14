@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from torch import nn
 import torchvision
 
-from utils import matrix_IOU_corner, corner_to_center, center_to_corner
+from utils import matrix_IOU_corner, corner_to_center, center_to_corner, corners_to_centers, centers_to_corners
 
 
 class BoxHead(torch.nn.Module):
@@ -110,7 +110,8 @@ class BoxHead(torch.nn.Module):
         return torch.reshape(feature_vectors, (feature_vectors.shape[0], 256 * P * P))
 
     def postprocess_detections(self, class_logits, box_regression, proposals,
-                               conf_thresh=0.5, keep_num_preNMS=500, keep_num_postNMS=50):
+                               conf_thresh=0.5, keep_num_preNMS=500, keep_num_postNMS=50,
+                               img_size: tuple = (800, 1088)):
         """
         This function does the post processing for the results of the Box Head for a batch of images
         Use the proposals to distinguish the outputs from each image
@@ -130,8 +131,133 @@ class BoxHead(torch.nn.Module):
                                                                     the regressed box)
               labels: list:len(bz){(post_NMS_boxes_per_image)}   (top class of each regressed box)
         """
+        boxes = []
+        scores = []
+        labels = []
+
+        start_id = 0
+        for batch_id in range(len(proposals)):
+            per_image_proposals = proposals[batch_id]
+            per_image_class = class_logits[start_id:start_id + per_image_proposals.shape[0], :]
+            per_image_box = box_regression[start_id:start_id + per_image_proposals.shape[0], :]
+            start_id += per_image_proposals.shape[0]
+
+            # remove background boxes
+            to_remove_id = \
+                per_image_class[:, 1] < conf_thresh \
+                and per_image_class[:, 2] < conf_thresh \
+                and per_image_class[:, 2] < conf_thresh
+            print(to_remove_id)
+            if torch.sum(~to_remove_id) == 0:
+                continue
+            per_image_proposals = per_image_proposals[~to_remove_id]
+            per_image_class = per_image_class[~to_remove_id]
+            per_image_box = per_image_box[~to_remove_id]
+            per_image_label = torch.argmax(per_image_class, dim=1) - 1
+            print(per_image_label)
+
+            # transform to [x1,y1,x2,y2] format
+            per_image_proposals_center = corners_to_centers(per_image_proposals)
+            prediction_box_center = torch.zeros(per_image_box.shape).to(self.device)
+            for i in range(3):
+                prediction_box_center[:, 0 + i * 4] = per_image_box[:, 0 + i * 4] * \
+                    per_image_proposals_center[:, 2] + per_image_proposals_center[:, 0]
+                prediction_box_center[:, 1 + i * 4] = per_image_box[:, 1 + i * 4] * \
+                    per_image_proposals_center[:, 3] + per_image_proposals_center[:, 1]
+                prediction_box_center[:, 2 + i * 4] \
+                    = torch.exp(per_image_box[:, 2 + i * 4]) * per_image_proposals_center[:, 2]
+                prediction_box_center[:, 3 + i * 4] \
+                    = torch.exp(per_image_box[:, 3 + i * 4]) * per_image_proposals_center[:, 3]
+            prediction_box_corner = torch.zeros(per_image_box.shape).to(self.device)
+            for i in range(3):
+                prediction_box_corner[:, i * 4:i * 4 + 4] \
+                    = centers_to_corners(prediction_box_center[:, i * 4:i * 4 + 4])
+                # Crop the x1, x2
+                prediction_box_corner[:, i * 4] = \
+                    torch.min(prediction_box_corner[:, i * 4],
+                              img_size[1] * torch.ones(prediction_box_corner[:, i * 4].shape).to(self.device))
+                prediction_box_corner[:, i * 4 + 2] = \
+                    torch.min(prediction_box_corner[:, i * 4 + 2],
+                              img_size[1] * torch.ones(prediction_box_corner[:, i * 4].shape).to(self.device))
+                # Crop the y1, y2
+                prediction_box_corner[:, i * 4 + 1] = \
+                    torch.min(prediction_box_corner[:, i * 4 + 1],
+                              img_size[0] * torch.ones(prediction_box_corner[:, i * 4].shape).to(self.device))
+                prediction_box_corner[:, i * 4 + 3] = \
+                    torch.min(prediction_box_corner[:, i * 4 + 3],
+                              img_size[0] * torch.ones(prediction_box_corner[:, i * 4].shape).to(self.device))
+            prediction_box_corner = torch.max(prediction_box_corner,
+                                              torch.zeros(prediction_box_corner.shape).to(self.device))
+
+            prediction_box_corner_max = torch.zeros(prediction_box_corner.shape[0], 4).to(self.device)
+            prediction_score_max = torch.max(per_image_class, dim=1).values.to(self.device)
+            print(prediction_score_max)
+            for i in range(prediction_box_corner_max.shape[0]):
+                prediction_box_corner_max[i, :] = prediction_box_corner[i,
+                                                                        per_image_label[i] * 4:per_image_label[i] * 4 + 4]
+            print(prediction_box_corner_max)
+
+            # Keep the proposals with the top K objectness scores
+            prediction_score_max_sorted_idx = torch.argsort(prediction_score_max, descending=True)
+            prediction_score_max_K = prediction_score_max[prediction_score_max_sorted_idx[:keep_num_preNMS]]
+            prediction_box_corner_K = prediction_box_corner_max[prediction_score_max_sorted_idx[:keep_num_preNMS]]
+            print(prediction_score_max_K)
+
+            # Compute NMS
+            nms_predict_scores = self.NMS(prediction_score_max_K, prediction_box_corner_K)
+
+            #   pick the top N mat classes & proposal coords after NMS
+            nms_sorted_idx = torch.argsort(nms_predict_scores, descending=True)
+            nms_labels = per_image_label[nms_sorted_idx[:keep_num_postNMS]]
+            nms_prebox = prediction_box_corner_K[nms_sorted_idx[:keep_num_postNMS]]
+            nms_scores = prediction_score_max_K[nms_sorted_idx[:keep_num_postNMS]]
+
+            boxes.append(nms_prebox)
+            scores.append(nms_scores)
+            labels.append(nms_labels)
 
         return boxes, scores, labels
+
+    def NMS(self, predict_class, prebox):
+        """
+        Input:
+        -----
+              predict_class: (top_k_boxes) (scores of the top k boxes)
+              prebox: (top_k_boxes,4) (coordinate of the top k boxes)
+        Output:
+        -----
+              nms_predict_class: (Post_NMS_boxes)
+        """
+
+        ##################################
+        # perform NMS
+        ##################################
+
+        K = prebox.shape[0]
+
+        # compute the IOU for bounding boxes
+        bbox_mesh_x = prebox.repeat(K, 1, 1)
+        bbox_mesh_y = bbox_mesh_x.permute(1, 0, 2)
+
+        ious = matrix_IOU_corner(bbox_mesh_x, bbox_mesh_y, device=self.device).triu(diagonal=1)
+
+        # IOU(*, i) for (n_act, n_act)
+        #   take i as row and k as column
+        #   for each i, all non-zero (i, k) represents IOU(i, k) where s_k > s_i
+        #
+        # ious_i == IOU(*, i)
+        #
+        #   since we would like to minimize f(IOU(*, i)), we wish to find max(IOU(*, i))
+        #
+        ious_i = torch.max(ious, dim=0).values
+        ious_i = ious_i.expand(K, K).T
+
+        # Matrix NMS
+        decay = (1 - ious) / (1 - ious_i)
+
+        # min of f(IOU(i, j)) / f(IOU(*, i))
+        decay = torch.min(decay, dim=0).values
+        return decay * predict_class
 
     def classifier_loss(self, class_minibatch: torch.Tensor,
                         class_minibatch_gt: torch.Tensor) -> float:
@@ -397,3 +523,20 @@ if __name__ == '__main__':
         correctness = torch.abs(loss_class - loss_class_gt) < 0.01
         difference = torch.abs(loss_class - loss_class_gt)[~correctness]
         print(difference, difference.shape)
+
+
+    # Test Postprocessing
+    # class_logits: (total_proposals,(C+1))
+    # box_regression: (total_proposal,4*C)           ([t_x,t_y,t_w,t_h] format)
+    # proposals: list:len(bz)(per_image_proposals,4) (the proposals are produced from RPN
+    #                                                 [x1,y1,x2,y2] format)
+    class_logits = torch.tensor([[0.1, 0.2, 0.6, 0.1],
+                                 [0.4, 0.2, 0.2, 0.2]])
+    box_regression = torch.ones(2, 12) * 0.5
+    proposals = [torch.tensor([[100, 100, 400, 400]]),
+                 torch.tensor([[200, 200, 600, 600]])]
+
+    boxes, scores, labels = net.postprocess_detections(class_logits, box_regression, proposals)
+    print(boxes)
+    print(scores)
+    print(labels)
