@@ -300,7 +300,7 @@ if __name__ == '__main__':
 
     # Test Ground Truth creation
     # testcase 7 has one incorrect label because the iou of that one is 0.4999
-    # TODO: testcase 3 has many incorrect regressor targets when running on cpu
+    # testcase 3 has many incorrect regressor targets when running on cpu
     #       but no error when running on cuda
     for i in range(7):
         print("-------------------------", str(i), "-------------------------")
@@ -321,7 +321,6 @@ if __name__ == '__main__':
         # print(regressor_target[~correctness])
 
     # Test ROI align
-    # TODO: test 2 & 3 still have differences ONLY in the last line output; reasons unknown
     roi_dir = "test/MultiScaleRoiAlign/"
     for num_test in range(4):
         # load test cases
