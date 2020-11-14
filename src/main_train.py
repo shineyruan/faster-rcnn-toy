@@ -87,7 +87,18 @@ if __name__ == "__main__":
     list_class_test_loss = []
     list_regression_test_loss = []
 
-    for epoch in range(num_epochs):
+    resume = False
+    start_epoch = 0
+    if resume:
+        start_epoch = 1
+        path = os.path.join(checkpoints_path, 'rpn_epoch' + str(start_epoch - 1))
+        checkpoint = torch.load(path)
+        box_head.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        print("Loaded checkpoint", start_epoch - 1)
+
+    for epoch in range(start_epoch, num_epochs):
         count = 0
         avg_train_loss = 0
         avg_class_train_loss = 0
@@ -97,6 +108,12 @@ if __name__ == "__main__":
         enumerate_tqdm = tqdm(enumerate(train_loader, 0))
         box_head.train()
         for iter, batch in enumerate_tqdm:
+
+            # ############## FOR DEBUG ################
+            # if iter > 0:
+            #     break
+            # #########################################
+
             images, labels, _, bbox, index = batch
             images = images.to(net_device)
 
@@ -123,6 +140,11 @@ if __name__ == "__main__":
             labels, regressor_target = box_head.create_ground_truth(proposals,
                                                                     labels,
                                                                     bbox)
+
+            # ############## FOR DEBUG ################
+            # print("output label:", labels.nonzero(as_tuple=False).shape)
+            # #########################################
+
             loss, loss_class, loss_reg = box_head.compute_loss(class_logits,
                                                                box_preds,
                                                                labels.to(net_device),
