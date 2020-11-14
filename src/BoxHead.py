@@ -209,8 +209,8 @@ class BoxHead(torch.nn.Module):
         reg_minibatch = torch.Tensor([]).to(self.device)
         reg_minibatch_gt = torch.Tensor([]).to(self.device)
 
-        no_bg_idx = (labels > 0).nonzero(as_tuple=False).squeeze()
-        bg_idx = (labels == 0).nonzero(as_tuple=False).squeeze()
+        no_bg_idx = (labels.T.squeeze() > 0).nonzero(as_tuple=False).squeeze()
+        bg_idx = (labels.T.squeeze() == 0).nonzero(as_tuple=False).squeeze()
 
         if random_permutation_foreground is None and random_permutation_background is None:
             M_no_bg = int(effective_batch / 4)
@@ -259,7 +259,7 @@ class BoxHead(torch.nn.Module):
             reg_minibatch_gt = torch.cat(
                 [reg_minibatch_gt, regression_targets[bg_idx][random_permutation_background]], dim=0)
 
-        class_minibatch_gt = class_minibatch_gt.type(torch.long)
+        class_minibatch_gt = class_minibatch_gt.T.squeeze().type(torch.long)
 
         loss_class = self.classifier_loss(class_minibatch, class_minibatch_gt)
         loss_regr = self.regression_loss(reg_minibatch, reg_minibatch_gt, class_minibatch_gt)
