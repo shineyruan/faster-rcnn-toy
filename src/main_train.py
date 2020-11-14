@@ -127,7 +127,8 @@ if __name__ == "__main__":
                                                                box_preds,
                                                                labels.to(net_device),
                                                                regressor_target.to(net_device),
-                                                               effective_batch=32)
+                                                               effective_batch=32,
+                                                               lambda_coeff=2.349)
             loss.backward()
             optimizer.step()
 
@@ -186,7 +187,8 @@ if __name__ == "__main__":
                                                                    box_preds,
                                                                    labels.to(net_device),
                                                                    regressor_target.to(net_device),
-                                                                   effective_batch=32)
+                                                                   effective_batch=32,
+                                                                   lambda_coeff=2.349)
 
                 avg_test_loss += loss.item()
                 avg_class_test_loss += loss_class.item()
