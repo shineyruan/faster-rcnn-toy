@@ -329,43 +329,43 @@ import os
 if __name__ == '__main__':
     net = BoxHead(device='cuda', Classes=3, P=7)
 
-    # # Test Ground Truth creation
-    # # testcase 7 has one incorrect label because the iou of that one is 0.4999
-    # # testcase 3 has many incorrect regressor targets when running on cpu
-    # #       but no error when running on cuda
-    # for i in range(7):
-    #     print("-------------------------", str(i), "-------------------------")
-    #     testcase = torch.load("test/GroundTruth/ground_truth_test" + str(i) + ".pt")
-    #     print(testcase.keys())
-    #     print(len(testcase['bbox']))
-    #     labels, regressor_target = net.create_ground_truth(testcase['proposals'],
-    #                                                        testcase['gt_labels'],
-    #                                                        testcase['bbox'])
-    #     correctness = labels.cpu().type(
-    #         torch.int8).reshape(-1) == testcase['labels'].type(torch.int8).reshape(-1)
-    #     print(labels.type(torch.int8).reshape(-1)[~correctness])
-    #     print(testcase['labels'].type(torch.int8).reshape(-1)[~correctness])
-    #     correctness = torch.abs(testcase['regressor_target'] - regressor_target.cpu()) < 0.01
-    #     # print((~correctness).nonzero())
-    #     print(torch.abs(testcase['regressor_target'] - regressor_target.cpu())[~correctness])
-    #     # print(testcase['regressor_target'][~correctness])
-    #     # print(regressor_target[~correctness])
+    # Test Ground Truth creation
+    # testcase 7 has one incorrect label because the iou of that one is 0.4999
+    # testcase 3 has many incorrect regressor targets when running on cpu
+    #       but no error when running on cuda
+    for i in range(7):
+        print("-------------------------", str(i), "-------------------------")
+        testcase = torch.load("test/GroundTruth/ground_truth_test" + str(i) + ".pt")
+        print(testcase.keys())
+        print(len(testcase['bbox']))
+        labels, regressor_target = net.create_ground_truth(testcase['proposals'],
+                                                           testcase['gt_labels'],
+                                                           testcase['bbox'])
+        correctness = labels.cpu().type(
+            torch.int8).reshape(-1) == testcase['labels'].type(torch.int8).reshape(-1)
+        print(labels.type(torch.int8).reshape(-1)[~correctness])
+        print(testcase['labels'].type(torch.int8).reshape(-1)[~correctness])
+        correctness = torch.abs(testcase['regressor_target'] - regressor_target.cpu()) < 0.01
+        # print((~correctness).nonzero())
+        print(torch.abs(testcase['regressor_target'] - regressor_target.cpu())[~correctness])
+        # print(testcase['regressor_target'][~correctness])
+        # print(regressor_target[~correctness])
 
-    # # Test ROI align
-    # roi_dir = "test/MultiScaleRoiAlign/"
-    # for num_test in range(4):
-    #     # load test cases
-    #     path = os.path.join(roi_dir, "multiscale_RoIAlign_test" + str(num_test) + ".pt")
-    #     fpn_feat_list = [item.cuda() for item in torch.load(path)['fpn_feat_list']]
-    #     proposals = [item.cuda() for item in torch.load(path)['proposals']]
-    #     output_feature_vectors = torch.load(path)['output_feature_vectors'].cuda()
-    #     feature_vectors = net.MultiScaleRoiAlign(fpn_feat_list, proposals)
-    #     print("\n----- ROI align test {} -----".format(num_test))
-    #     print(feature_vectors)
-    #     print(output_feature_vectors)
-    #     correctness = torch.abs(feature_vectors - output_feature_vectors) < 0.01
-    #     difference = torch.abs(feature_vectors - output_feature_vectors)[~correctness]
-    #     print(difference, difference.shape)
+    # Test ROI align
+    roi_dir = "test/MultiScaleRoiAlign/"
+    for num_test in range(4):
+        # load test cases
+        path = os.path.join(roi_dir, "multiscale_RoIAlign_test" + str(num_test) + ".pt")
+        fpn_feat_list = [item.cuda() for item in torch.load(path)['fpn_feat_list']]
+        proposals = [item.cuda() for item in torch.load(path)['proposals']]
+        output_feature_vectors = torch.load(path)['output_feature_vectors'].cuda()
+        feature_vectors = net.MultiScaleRoiAlign(fpn_feat_list, proposals)
+        print("\n----- ROI align test {} -----".format(num_test))
+        print(feature_vectors)
+        print(output_feature_vectors)
+        correctness = torch.abs(feature_vectors - output_feature_vectors) < 0.01
+        difference = torch.abs(feature_vectors - output_feature_vectors)[~correctness]
+        print(difference, difference.shape)
 
     # Test Loss
     loss_dir = "test/Loss/"
