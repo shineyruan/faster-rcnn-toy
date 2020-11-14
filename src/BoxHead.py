@@ -336,7 +336,7 @@ if __name__ == '__main__':
         print(testcase['labels'].type(torch.int8).reshape(-1)[~correctness])
         correctness = torch.abs(testcase['regressor_target'] - regressor_target.cpu()) < 0.01
         # print((~correctness).nonzero())
-        print(torch.abs(testcase['regressor_target'] - regressor_target)[~correctness])
+        print(torch.abs(testcase['regressor_target'] - regressor_target.cpu())[~correctness])
         # print(testcase['regressor_target'][~correctness])
         # print(regressor_target[~correctness])
 
