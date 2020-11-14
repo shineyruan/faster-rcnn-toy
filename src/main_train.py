@@ -117,6 +117,7 @@ if __name__ == "__main__":
                 #   list:len(FPN){(bz,256,H_feat,W_feat)}
                 fpn_feat_list = list(backbone_out.values())
 
+            optimizer.zero_grad()
             feature_vectors = box_head.MultiScaleRoiAlign(fpn_feat_list, proposals)
             class_logits, box_preds = box_head.forward(feature_vectors)
             labels, regressor_target = box_head.create_ground_truth(proposals,
@@ -136,6 +137,8 @@ if __name__ == "__main__":
             avg_class_train_loss += loss_class.item()
             avg_regression_train_loss += loss_reg.item()
             count += 1
+
+        scheduler.step()
 
         avg_train_loss /= count
         avg_class_train_loss /= count
