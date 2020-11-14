@@ -46,8 +46,8 @@ class BoxHead(torch.nn.Module):
             num_gtbboxes = gt_bboxes[batch_id].shape[0]
             proposal_mat = proposals[batch_id].expand(
                 num_gtbboxes, num_proposals, 4).to(self.device)
-            gtbbox_mat = gt_bboxes[batch_id].expand(num_proposals, num_gtbboxes, 4).to(self.device)
-            gtbbox_mat = torch.transpose(gtbbox_mat, 0, 1)
+            gtbbox_mat = gt_bboxes[batch_id].expand(num_proposals, num_gtbboxes, 4)
+            gtbbox_mat = torch.transpose(gtbbox_mat, 0, 1).to(self.device)
             # iou_mat: (num_gtbboxes, num_proposals)
             iou_mat = matrix_IOU_corner(proposal_mat, gtbbox_mat, device=self.device)
 
@@ -300,7 +300,8 @@ if __name__ == '__main__':
 
     # Test Ground Truth creation
     # testcase 7 has one incorrect label because the iou of that one is 0.4999
-    # TODO: testcase 3 has many incorrect regressor targets
+    # TODO: testcase 3 has many incorrect regressor targets when running on cpu
+    #       but no error when running on cuda
     for i in range(7):
         print("-------------------------", str(i), "-------------------------")
         testcase = torch.load("test/GroundTruth/ground_truth_test" + str(i) + ".pt")
@@ -309,11 +310,11 @@ if __name__ == '__main__':
         labels, regressor_target = net.create_ground_truth(testcase['proposals'],
                                                            testcase['gt_labels'],
                                                            testcase['bbox'])
-        correctness = labels.type(
+        correctness = labels.cpu().type(
             torch.int8).reshape(-1) == testcase['labels'].type(torch.int8).reshape(-1)
         print(labels.type(torch.int8).reshape(-1)[~correctness])
         print(testcase['labels'].type(torch.int8).reshape(-1)[~correctness])
-        correctness = torch.abs(testcase['regressor_target'] - regressor_target) < 0.01
+        correctness = torch.abs(testcase['regressor_target'] - regressor_target.cpu()) < 0.01
         # print((~correctness).nonzero())
         print(torch.abs(testcase['regressor_target'] - regressor_target)[~correctness])
         # print(testcase['regressor_target'][~correctness])
