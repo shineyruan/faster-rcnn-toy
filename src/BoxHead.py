@@ -97,37 +97,17 @@ class BoxHead(torch.nn.Module):
         # Here you can use torchvision.ops.RoIAlign check the docs
         #####################################
 
-        feature_vectors = []
+        fpn_names = [str(i) for i in range(len(fpn_feat_list))]
+        fpn_dict = {}
+        for i, name in enumerate(fpn_names):
+            fpn_dict[name] = fpn_feat_list.pop(0)
 
-        for batch_i in range(len(proposals)):
-            w = proposals[batch_i][..., 2] - proposals[batch_i][..., 0]
-            h = proposals[batch_i][..., 3] - proposals[batch_i][..., 1]
+        del fpn_feat_list
 
-            # Given a proposal box with w and h we determine the FPN P_k according to the following:
-            #   k = floor(4+log_2(sqrt(w*h)/224))
-            #   where k is ranging from 2 to 5
-            #
-            # Get P[k-2] according to the calculated k value.
-            #
-            k = torch.floor(4 + torch.log2(torch.sqrt(w * h) / 224)).type(torch.int) - 2
+        roi_fn = torchvision.ops.MultiScaleRoIAlign(fpn_names, (P, P), sampling_ratio=-1)
+        feature_vectors = roi_fn(fpn_dict, proposals, [img_size])
 
-            for i, item in enumerate(k):
-                # get ROI align
-                featmap_size = fpn_feat_list[item][batch_i].shape[-2:]
-                bbox = proposals[batch_i][i]
-                # rescale bbox region to featmap size
-                x_idx = torch.Tensor([0, 2]).type(torch.long)
-                y_idx = torch.Tensor([1, 3]).type(torch.long)
-                bbox[x_idx] = bbox[x_idx] * featmap_size[0] / img_size[0]
-                bbox[y_idx] = bbox[y_idx] * featmap_size[1] / img_size[1]
-
-                roi_out = torchvision.ops.roi_align(fpn_feat_list[item][batch_i].unsqueeze(0),
-                                                    [bbox.unsqueeze(0)],
-                                                    output_size=(P, P))
-                feature_vectors.append(torch.squeeze(roi_out))
-
-        feature_vectors = torch.stack(feature_vectors)
-        return torch.reshape(feature_vectors, (feature_vectors.shape[0], -1))
+        return torch.reshape(feature_vectors, (feature_vectors.shape[0], 256 * P * P))
 
     def postprocess_detections(self, class_logits, box_regression, proposals,
                                conf_thresh=0.5, keep_num_preNMS=500, keep_num_postNMS=50):
@@ -342,16 +322,19 @@ if __name__ == '__main__':
     # Test ROI align
     # TODO: test 2 & 3 still have differences ONLY in the last line output; reasons unknown
     roi_dir = "test/MultiScaleRoiAlign/"
-    num_test = 0
-    # load test cases
-    path = os.path.join(roi_dir, "multiscale_RoIAlign_test" + str(num_test) + ".pt")
-    fpn_feat_list = [item.cuda() for item in torch.load(path)['fpn_feat_list']]
-    proposals = [item.cuda() for item in torch.load(path)['proposals']]
-    output_feature_vectors = torch.load(path)['output_feature_vectors'].cuda()
-    feature_vectors = net.MultiScaleRoiAlign(fpn_feat_list, proposals)
-    print("\n----- ROI align test -----")
-    print(feature_vectors)
-    print(output_feature_vectors)
+    for num_test in range(4):
+        # load test cases
+        path = os.path.join(roi_dir, "multiscale_RoIAlign_test" + str(num_test) + ".pt")
+        fpn_feat_list = [item.cuda() for item in torch.load(path)['fpn_feat_list']]
+        proposals = [item.cuda() for item in torch.load(path)['proposals']]
+        output_feature_vectors = torch.load(path)['output_feature_vectors'].cuda()
+        feature_vectors = net.MultiScaleRoiAlign(fpn_feat_list, proposals)
+        print("\n----- ROI align test {} -----".format(num_test))
+        print(feature_vectors)
+        print(output_feature_vectors)
+        correctness = torch.abs(feature_vectors - output_feature_vectors) < 0.01
+        difference = torch.abs(feature_vectors - output_feature_vectors)[~correctness]
+        print(difference, difference.shape)
 
     # Test Loss
     loss_dir = "test/Loss/"
