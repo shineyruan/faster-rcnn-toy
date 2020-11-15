@@ -2,9 +2,11 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 import torchvision
+from sklearn.metrics import auc
 
 from utils import (
-    matrix_IOU_corner, corner_to_center, center_to_corner, corners_to_centers, centers_to_corners
+    matrix_IOU_corner, corner_to_center, center_to_corner, corners_to_centers, centers_to_corners,
+    IOU
 )
 
 
@@ -531,40 +533,40 @@ class BoxHead(torch.nn.Module):
 
         matches = []
         scores = []
-        num_trues = torch.zeros(3)
-        num_positives = torch.zeros(3)
+        num_trues = torch.zeros(1, 3)
+        num_positives = torch.zeros(1, 3)
 
         batch_size = len(nms_labels)
 
         for bz in range(batch_size):
             match = torch.zeros(nms_labels[bz].shape[0], 3)
             score = torch.zeros(match.shape)
-            num_true = torch.zeros(3)
+            num_true = torch.zeros(1, 3)
             num_positive = torch.zeros(num_true.shape)
 
             # calculate trues
             for obj_label in gt_labels[bz]:
                 if obj_label > 0:
-                    num_true[obj_label.type(torch.long) - 1] += 1
+                    num_true[0, obj_label.type(torch.long) - 1] += 1
 
             # calculate positives
-            cate = torch.argmax(nms_labels[bz], dim=1)
-            for obj_label in cate:
-                num_positive[obj_label.type(torch.long)] += 1
+            for obj_label in nms_labels[bz]:
+                num_positive[0, obj_label.type(torch.long)] += 1
 
-            for i_pred, class_pred in enumerate(cate):
-                if class_pred + 1 in gt_labels[bz]:
+            for i_pred, class_pred in enumerate(nms_labels[bz]):
+                class_pred_scalar = class_pred.item()
+                if class_pred_scalar + 1 in gt_labels[bz]:
 
                     # retrieve class gt label
-                    i_gt_list = (gt_labels[bz] == class_pred + 1).nonzero(as_tuple=False)
+                    i_gt_list = (gt_labels[bz] == class_pred + 1).nonzero(as_tuple=False).squeeze(0)
 
                     for i_gt in i_gt_list:
                         # retrieve masks
                         box_pred = nms_boxes[bz][i_pred]
-                        box_gt = gt_boxes[bz][i_gt]
+                        box_gt = gt_boxes[bz][i_gt.item()]
 
                         # compute IOU
-                        iou = matrix_IOU_corner(box_pred, box_gt)
+                        iou = IOU(box_pred, box_gt, mode='corner')
 
                         if iou > iou_thresh:
                             match[i_pred, class_pred] = 1
@@ -575,8 +577,59 @@ class BoxHead(torch.nn.Module):
             num_trues = torch.cat([num_trues, num_true], dim=0)
             num_positives = torch.cat([num_positives, num_positive], dim=0)
 
-        return torch.stack(matches), torch.stack(scores), \
-            torch.sum(num_trues), torch.sum(num_positives)
+        return torch.cat(matches), torch.cat(scores), \
+            torch.sum(num_trues, dim=0), torch.sum(num_positives, dim=0)
+
+    def average_precision(self, match_values, score_values, total_trues, total_positives,
+                          threshold=0.5):
+        """
+        Input:
+        -----
+            match_values - shape (N,) - matches with respect to true labels for a single class
+            score_values - shape (N,) - objectness for a single class
+            total_trues     - int      - total number of true labels for a single class in the
+                                         entire dataset
+            total_positives - int      - total number of positive labels for a single class in the
+                                        entire dataset
+
+        Output:
+        -----
+            area, sorted_recall, sorted_precision
+        """
+        # please fill in the appropriate arguments
+        # compute the average precision as mentioned in the PDF.
+        # it might be helpful to use - from sklearn.metrics import auc
+        #   to compute area under the curve.
+        area, sorted_recall, sorted_precision = None, None, None
+
+        max_score = torch.max(score_values).item()
+        ln = torch.linspace(threshold, max_score, steps=100)
+        precision_mat = torch.zeros(101)
+        recall_mat = torch.zeros(101)
+
+        # iterate through the linspace
+        for i, th in enumerate(ln):
+            matches = match_values[score_values > th]
+            TP = torch.sum(matches)  # true positives
+            precision = 1
+            if total_positives > 0:
+                precision = TP / total_positives
+
+            recall = 1
+            if total_trues > 0:
+                recall = TP / total_trues
+
+            precision_mat[i] = precision
+            recall_mat[i] = recall
+
+        recall_mat[100] = 0
+        precision_mat[100] = 1
+        sorted_idx = torch.argsort(recall_mat)
+        sorted_recall = recall_mat[sorted_idx]
+        sorted_precision = precision_mat[sorted_idx]
+        area = auc(sorted_recall, sorted_precision)
+
+        return area, sorted_recall, sorted_precision
 
 
 import os
