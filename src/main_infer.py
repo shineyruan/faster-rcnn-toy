@@ -68,8 +68,8 @@ if __name__ == "__main__":
     keep_topK = 20
 
     # load checkpoint
-    epoch = 39
-    path = os.path.join(checkpoints_path, "rpn_epoch" + str(epoch))
+    checkpoint_list = ["rpn_epoch39-1", "rpn_epoch49-2"]
+    path = os.path.join(checkpoints_path, checkpoint_list[-1])
     checkpoint = torch.load(path)
 
     # create device and RPN net
@@ -104,12 +104,16 @@ if __name__ == "__main__":
 
             feature_vectors = box_head.MultiScaleRoiAlign(fpn_feat_list, proposals)
             class_logits, box_preds = box_head.forward(feature_vectors, training=False)
-            boxes, scores, labels = box_head.postprocess_detections(
+            nms_boxes, nms_scores, nms_labels = box_head.postprocess_detections(
                 class_logits, box_preds, proposals, keep_num_postNMS=2)
 
+            matches, scores, num_trues, num_positives = \
+                box_head.box_head_evaluation(nms_boxes, nms_scores, nms_labels,
+                                             bbox, labels)
+
             for i in range(images.shape[0]):
-                out_img = visual_bbox_mask(images[i].cpu(), boxes[i].cpu(),
-                                           scores[i].cpu(), labels[i].cpu())
+                out_img = visual_bbox_mask(images[i].cpu(), nms_boxes[i].cpu(),
+                                           nms_scores[i].cpu(), nms_labels[i].cpu())
 
                 image_path = os.path.join(images_path, 'visual_output_' +
                                           str(iter) + '_' + str(i) + 'after_nms.png')
