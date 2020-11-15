@@ -143,21 +143,26 @@ class BoxHead(torch.nn.Module):
             start_id += per_image_proposals.shape[0]
 
             # remove background boxes
+            conf_thresh_tensor = conf_thresh * \
+                torch.ones(per_image_class[:, 1].shape).to(self.device)
             to_remove_id = \
-                per_image_class[:, 1] < conf_thresh \
-                and per_image_class[:, 2] < conf_thresh \
-                and per_image_class[:, 2] < conf_thresh
-            print(to_remove_id)
+                (per_image_class[:, 1] < conf_thresh_tensor) \
+                * (per_image_class[:, 2] < conf_thresh_tensor) \
+                * (per_image_class[:, 3] < conf_thresh_tensor)
+            # print(to_remove_id)
             if torch.sum(~to_remove_id) == 0:
+                boxes.append(torch.zeros(1, 4))
+                scores.append(torch.zeros(1))
+                labels.append(torch.zeros(1, dtype=torch.long))
                 continue
             per_image_proposals = per_image_proposals[~to_remove_id]
             per_image_class = per_image_class[~to_remove_id]
             per_image_box = per_image_box[~to_remove_id]
             per_image_label = torch.argmax(per_image_class, dim=1) - 1
-            print(per_image_label)
+            # print(per_image_label)
 
             # transform to [x1,y1,x2,y2] format
-            per_image_proposals_center = corners_to_centers(per_image_proposals)
+            per_image_proposals_center = corners_to_centers(per_image_proposals).to(self.device)
             prediction_box_center = torch.zeros(per_image_box.shape).to(self.device)
             for i in range(3):
                 prediction_box_center[:, 0 + i * 4] = per_image_box[:, 0 + i * 4] * \
@@ -171,7 +176,7 @@ class BoxHead(torch.nn.Module):
             prediction_box_corner = torch.zeros(per_image_box.shape).to(self.device)
             for i in range(3):
                 prediction_box_corner[:, i * 4:i * 4 + 4] \
-                    = centers_to_corners(prediction_box_center[:, i * 4:i * 4 + 4])
+                    = centers_to_corners(prediction_box_center[:, i * 4:i * 4 + 4]).to(self.device)
                 # Crop the x1, x2
                 prediction_box_corner[:, i * 4] = \
                     torch.min(prediction_box_corner[:, i * 4],
@@ -189,19 +194,22 @@ class BoxHead(torch.nn.Module):
             prediction_box_corner = torch.max(prediction_box_corner,
                                               torch.zeros(prediction_box_corner.shape).to(self.device))
 
-            prediction_box_corner_max = torch.zeros(prediction_box_corner.shape[0], 4).to(self.device)
+            prediction_box_corner_max = torch.zeros(
+                prediction_box_corner.shape[0], 4).to(self.device)
             prediction_score_max = torch.max(per_image_class, dim=1).values.to(self.device)
-            print(prediction_score_max)
+            # print(prediction_score_max)
             for i in range(prediction_box_corner_max.shape[0]):
-                prediction_box_corner_max[i, :] = prediction_box_corner[i,
-                                                                        per_image_label[i] * 4:per_image_label[i] * 4 + 4]
-            print(prediction_box_corner_max)
+                prediction_box_corner_max[i, :] = \
+                    prediction_box_corner[i, per_image_label[i] * 4:per_image_label[i] * 4 + 4]
+            # print(prediction_box_corner_max)
 
             # Keep the proposals with the top K objectness scores
             prediction_score_max_sorted_idx = torch.argsort(prediction_score_max, descending=True)
-            prediction_score_max_K = prediction_score_max[prediction_score_max_sorted_idx[:keep_num_preNMS]]
-            prediction_box_corner_K = prediction_box_corner_max[prediction_score_max_sorted_idx[:keep_num_preNMS]]
-            print(prediction_score_max_K)
+            prediction_score_max_K = \
+                prediction_score_max[prediction_score_max_sorted_idx[:keep_num_preNMS]]
+            prediction_box_corner_K = \
+                prediction_box_corner_max[prediction_score_max_sorted_idx[:keep_num_preNMS]]
+            # print(prediction_score_max_K)
 
             # Compute NMS
             nms_predict_scores = self.NMS(prediction_score_max_K, prediction_box_corner_K)
@@ -523,7 +531,6 @@ if __name__ == '__main__':
         correctness = torch.abs(loss_class - loss_class_gt) < 0.01
         difference = torch.abs(loss_class - loss_class_gt)[~correctness]
         print(difference, difference.shape)
-
 
     # Test Postprocessing
     # class_logits: (total_proposals,(C+1))
