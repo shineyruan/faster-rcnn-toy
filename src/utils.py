@@ -6,8 +6,8 @@ import cv2
 
 
 def visual_bbox_mask(image: torch.Tensor, bboxes: torch.Tensor,
-                     scores: torch.Tensor, labels: torch.Tensor,
-                     bbox_format='corner'):
+                     labels: torch.Tensor, scores: torch.Tensor = None,
+                     gt_bbox: torch.Tensor = None, bbox_format='corner'):
     """
     Input:
         image:  tensor, (3, H, W)           image, on CPU
@@ -21,6 +21,19 @@ def visual_bbox_mask(image: torch.Tensor, bboxes: torch.Tensor,
     out_img = cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR)
 
     for i in range(bboxes.shape[0]):
+        if gt_bbox is not None:
+            if bbox_format == 'corner':
+                x1_gt, y1_gt, x2_gt, y2_gt = bboxes[i][0], bboxes[i][1], bboxes[i][2], bboxes[i][3]
+            else:
+                x_gt, y_gt, w_gt, h_gt = bboxes[i][0], bboxes[i][1], bboxes[i][2], bboxes[i][3]
+                x1_gt = x_gt - w_gt / 2
+                y1_gt = y_gt - h_gt / 2
+                x2_gt = x_gt + w_gt / 2
+                y2_gt = y_gt + h_gt / 2
+
+            out_img = cv2.rectangle(out_img, (int(x1_gt), int(y1_gt)),
+                                    (int(x2_gt), int(y2_gt)), (255, 255, 255), 3)
+
         if bbox_format == 'corner':
             x1, y1, x2, y2 = bboxes[i][0], bboxes[i][1], bboxes[i][2], bboxes[i][3]
         else:
@@ -36,13 +49,15 @@ def visual_bbox_mask(image: torch.Tensor, bboxes: torch.Tensor,
         color = tuple(color)
 
         out_img = cv2.rectangle(out_img, (int(x1), int(y1)), (int(x2), int(y2)), color, 3)
-        out_img = cv2.putText(out_img,
-                              "Score: {}".format(scores[i]),
-                              (int(x1), int(y1)),
-                              cv2.FONT_HERSHEY_SIMPLEX,
-                              1.0,
-                              (20, 200, 200),
-                              2)
+
+        if scores is not None:
+            out_img = cv2.putText(out_img,
+                                  "Score: {}".format(scores[i]),
+                                  (int(x1), int(y1)),
+                                  cv2.FONT_HERSHEY_SIMPLEX,
+                                  1.0,
+                                  (20, 200, 200),
+                                  2)
 
     return out_img
 
