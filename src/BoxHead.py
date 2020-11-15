@@ -219,6 +219,7 @@ class BoxHead(torch.nn.Module):
                 prediction_score_max[prediction_score_max_sorted_idx[:keep_num_preNMS]]
             prediction_box_corner_K = \
                 prediction_box_corner_max[prediction_score_max_sorted_idx[:keep_num_preNMS]]
+            prediction_label_K = per_image_label[prediction_score_max_sorted_idx[:keep_num_preNMS]]
             # print(prediction_score_max_K)
 
             # Compute NMS
@@ -226,7 +227,7 @@ class BoxHead(torch.nn.Module):
 
             #   pick the top N mat classes & proposal coords after NMS
             nms_sorted_idx = torch.argsort(nms_predict_scores, descending=True)
-            nms_labels = per_image_label[nms_sorted_idx[:keep_num_postNMS]]
+            nms_labels = prediction_label_K[nms_sorted_idx[:keep_num_postNMS]]
             nms_prebox = prediction_box_corner_K[nms_sorted_idx[:keep_num_postNMS]]
             nms_scores = prediction_score_max_K[nms_sorted_idx[:keep_num_postNMS]]
 
