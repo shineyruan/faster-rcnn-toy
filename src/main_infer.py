@@ -5,6 +5,7 @@ import os
 from tqdm import tqdm
 import numpy as np
 from torchvision.models.detection.image_list import ImageList
+from matplotlib import pyplot as plt
 
 # local modules
 from dataset import BuildDataset, BuildDataLoader
@@ -31,6 +32,8 @@ if __name__ == "__main__":
     bboxes_path = 'data/hw3_mycocodata_bboxes_comp_zlib.npy'
     checkpoints_path = 'checkpoint_save/'
     images_path = 'out_images/'
+    mAP_path = "mAP/"
+    figures_path = 'figures/'
     if IN_COLAB:
         imgs_path = os.path.join(COLAB_ROOT, imgs_path)
         masks_path = os.path.join(COLAB_ROOT, masks_path)
@@ -38,10 +41,13 @@ if __name__ == "__main__":
         bboxes_path = os.path.join(COLAB_ROOT, bboxes_path)
         checkpoints_path = os.path.join(COLAB_ROOT, checkpoints_path)
         images_path = os.path.join(COLAB_ROOT, images_path)
+        mAP_path = os.path.join(COLAB_ROOT, mAP_path)
+        figures_path = os.path.join(COLAB_ROOT, figures_path)
 
     paths = [imgs_path, masks_path, labels_path, bboxes_path]
 
     os.makedirs(images_path, exist_ok=True)
+    os.makedirs(figures_path, exist_ok=True)
 
     # load the data into data.Dataset
     dataset = BuildDataset(paths)
@@ -77,7 +83,10 @@ if __name__ == "__main__":
     box_head.load_state_dict(checkpoint['model_state_dict'])
     box_head.eval()
 
-    # save test figures
+    trues_per_batch = []
+    positives_per_batch = []
+    match_values = []
+    score_values = []
 
     with torch.no_grad():
         # loop over all images
@@ -85,6 +94,8 @@ if __name__ == "__main__":
         for iter, batch in enumerate_tqdm:
             images, labels, _, bbox, index = batch
             images = images.to(net_device)
+            labels = [item.to(net_device) for item in labels]
+            bbox = [item.to(net_device) for item in bbox]
 
             # Take the features from the backbone
             backbone_out = backbone(images)
@@ -111,13 +122,75 @@ if __name__ == "__main__":
                 box_head.box_head_evaluation(nms_boxes, nms_scores, nms_labels,
                                              bbox, labels)
 
-            for i in range(images.shape[0]):
-                out_img = visual_bbox_mask(images[i].cpu(), nms_boxes[i].cpu(),
-                                           nms_scores[i].cpu(), nms_labels[i].cpu())
+            trues_per_batch.append(num_trues)
+            positives_per_batch.append(num_positives)
+            match_values.append(matches)
+            score_values.append(scores)
 
-                image_path = os.path.join(images_path, 'visual_output_' +
-                                          str(iter) + '_' + str(i) + 'after_nms.png')
-                cv2.imwrite(image_path, out_img)
-                cv2.imshow("visualize output", out_img)
-                cv2.waitKey(0)
-                cv2.destroyAllWindows()
+            # for i in range(images.shape[0]):
+            #     out_img = visual_bbox_mask(images[i].cpu(), nms_boxes[i].cpu(),
+            #                                nms_scores[i].cpu(), nms_labels[i].cpu())
+
+            #     image_path = os.path.join(images_path, 'visual_output_' +
+            #                               str(iter) + '_' + str(i) + 'after_nms.png')
+            #     cv2.imwrite(image_path, out_img)
+            #     cv2.imshow("visualize output", out_img)
+            #     cv2.waitKey(0)
+            #     cv2.destroyAllWindows()
+
+    trues_per_batch = torch.stack(trues_per_batch)
+    positives_per_batch = torch.stack(positives_per_batch)
+    trues_per_batch = torch.sum(trues_per_batch, dim=0)
+    positives_per_batch = torch.sum(positives_per_batch, dim=0)
+    match_values = torch.cat(match_values)
+    score_values = torch.cat(score_values)
+
+    os.makedirs(mAP_path, exist_ok=True)
+    path = os.path.join(mAP_path, 'matches.pt')
+    torch.save({
+        'trues per batch': trues_per_batch,
+        'positives per batch': positives_per_batch,
+        'match_values': match_values,
+        'score_values': score_values
+    }, path)
+
+    # calculate mAP
+    list_sorted_recall = []
+    list_sorted_precision = []
+    list_AP = []
+
+    AP = 0
+    cnt = 0
+    for class_i in range(3):
+        if torch.sum(match_values[:, class_i]) > 0:
+            area, sorted_recall, sorted_precision = \
+                box_head.average_precision(match_values[:, class_i],
+                                           score_values[:, class_i],
+                                           trues_per_batch[class_i],
+                                           positives_per_batch[class_i],
+                                           threshold=0.5)
+            AP += area
+            cnt += 1
+
+            list_sorted_recall.append(sorted_recall)
+            list_sorted_precision.append(sorted_precision)
+            list_AP.append(area)
+
+    mAP = AP if cnt == 0 else AP / cnt
+    # calculate mean loss
+    print('testing mAP   {}'.format(mAP))
+
+    path = os.path.join(mAP_path, 'mAP')
+    torch.save({
+        'sorted_recalls': list_sorted_recall,
+        'sorted_precisions': list_sorted_precision,
+        'AP': list_AP,
+        'mAP': mAP
+    }, path)
+
+    for i in range(len(list_sorted_recall)):
+        plt.figure()
+        plt.plot(list_sorted_recall[i], list_sorted_precision[i], '.-')
+        plt.xlabel('Recall')
+        plt.ylabel('Precision')
+        plt.savefig(figures_path + "class_" + str(i) + ".png")
