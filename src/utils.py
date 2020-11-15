@@ -5,60 +5,46 @@ from functools import partial
 import cv2
 
 
-def visual_bbox_mask(image, masks=None, bboxs=None, labels=None, bbox_format='corner'):
+def visual_bbox_mask(image: torch.Tensor, bboxes: torch.Tensor,
+                     scores: torch.Tensor, labels: torch.Tensor,
+                     bbox_format='corner'):
     """
     Input:
-        image: tensor, 3 * h * w
-        masks: tensor, num_obj * h * w
-        bbox_format:    'corner' - [x1, y1, x2, y2]; 'center' - [x,y,w,h]
+        image:  tensor, (3, H, W)           image, on CPU
+        bboxes: tensor, (num_obj, 4)        per image bounding boxes, on CPU
+        scores: tensor, (num_obj, )         per image class confidence scores, on CPU
+        bbox_format:    'corner' - [x1, y1, x2, y2]; 'center' - [x, y, w, h]
     """
-    outim = np.copy(image.cpu().numpy().transpose(1, 2, 0))
-    outim = (outim * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])) * 255
-    outim = outim.astype(np.uint8)
-    outim = cv2.cvtColor(outim, cv2.COLOR_RGB2BGR)
-    if bboxs is not None:
-        for i in range(bboxs.shape[0]):
-            if bbox_format == 'corner':
-                x1, y1, x2, y2 = bboxs[i][0], bboxs[i][1], bboxs[i][2], bboxs[i][3]
-            else:
-                x, y, w, h = bboxs[i][0], bboxs[i][1], bboxs[i][2], bboxs[i][3]
-                x1 = x - w / 2
-                y1 = y - h / 2
-                x2 = x + w / 2
-                y2 = y + h / 2
+    out_img = np.copy(image.numpy().transpose(1, 2, 0))
+    out_img = (out_img * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])) * 255
+    out_img = out_img.astype(np.uint8)
+    out_img = cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR)
 
-            if labels is not None:
-                if labels[i] == 0:
-                    color = (255, 0, 0)
-                elif labels[i] == 1:
-                    color = (0, 255, 0)
-                elif labels[i] == 2:
-                    color = (0, 0, 255)
-                else:
-                    color = (255, 255, 255)
-            else:
-                color = (255, 0, 0)
-            outim = cv2.rectangle(outim, (int(x1), int(y1)), (int(x2), int(y2)), color, 3)
+    for i in range(bboxes.shape[0]):
+        if bbox_format == 'corner':
+            x1, y1, x2, y2 = bboxes[i][0], bboxes[i][1], bboxes[i][2], bboxes[i][3]
+        else:
+            x, y, w, h = bboxes[i][0], bboxes[i][1], bboxes[i][2], bboxes[i][3]
+            x1 = x - w / 2
+            y1 = y - h / 2
+            x2 = x + w / 2
+            y2 = y + h / 2
 
-    if masks is not None:
-        for i in range(masks.shape[0]):
-            outim = outim.astype(np.uint32)
-            if labels is None:
-                outim[:, :, (i + 2) % 3] = \
-                    np.clip(outim[:, :, (i + 2) % 3] + masks[i].cpu().numpy() * 100, 0, 255)
-            else:
-                outim[:, :, labels[i]] = \
-                    np.clip(outim[:, :, labels[i]] + masks[i].cpu().numpy() * 100, 0, 255)
-            outim = outim.astype(np.uint8)
-            if labels is not None and bboxs is not None:
-                outim = cv2.putText(outim,
-                                    "Class: {}".format(labels[i]),
-                                    (int(bboxs[i][0]), int(bboxs[i][1])),
-                                    cv2.FONT_HERSHEY_SIMPLEX,
-                                    1.0,
-                                    (20, 200, 200),
-                                    2)
-    return outim
+        color = [0, 0, 0]
+        if labels is not None:
+            color[labels[i]] = 255
+        color = tuple(color)
+
+        out_img = cv2.rectangle(out_img, (int(x1), int(y1)), (int(x2), int(y2)), color, 3)
+        out_img = cv2.putText(out_img,
+                              "Score: {}".format(scores[i]),
+                              (int(x1), int(y1)),
+                              cv2.FONT_HERSHEY_SIMPLEX,
+                              1.0,
+                              (20, 200, 200),
+                              2)
+
+    return out_img
 
 
 def MultiApply(func, *args, **kwargs):
