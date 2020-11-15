@@ -15,8 +15,9 @@ if __name__ == "__main__":
 
     os.makedirs(figures_path, exist_ok=True)
 
-    epoch = 39
-    path = os.path.join(checkpoints_path, "rpn_epoch" + str(epoch))
+    checkpoint_list = ["rpn_epoch39-1", "rpn_epoch49-2"]
+
+    path = os.path.join(checkpoints_path, checkpoint_list[0])
     checkpoint = torch.load(path)
 
     list_train_loss = checkpoint['list_train_loss']
