@@ -65,7 +65,7 @@ if __name__ == "__main__":
 
     # Here we keep the top 20, but during training you
     #   should keep around 200 boxes from the 1000 proposals
-    keep_topK = 200
+    keep_topK = 20
 
     # load checkpoint
     epoch = 39
@@ -81,7 +81,8 @@ if __name__ == "__main__":
 
     with torch.no_grad():
         # loop over all images
-        for iter, batch in enumerate(test_loader, 0):
+        enumerate_tqdm = tqdm(enumerate(test_loader, 0))
+        for iter, batch in enumerate_tqdm:
             images, labels, _, bbox, index = batch
             images = images.to(net_device)
 
