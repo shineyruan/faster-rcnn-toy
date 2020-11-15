@@ -116,7 +116,7 @@ if __name__ == "__main__":
             feature_vectors = box_head.MultiScaleRoiAlign(fpn_feat_list, proposals)
             class_logits, box_preds = box_head.forward(feature_vectors, training=False)
             nms_boxes, nms_scores, nms_labels = box_head.postprocess_detections(
-                class_logits, box_preds, proposals, keep_num_postNMS=2)
+                class_logits, box_preds, proposals, keep_num_postNMS=5)
             top_boxes, _, top_labels = box_head.get_top_K(
                 class_logits, box_preds, proposals)
 
