@@ -77,7 +77,7 @@ if __name__ == "__main__":
     # Initialize optimizer
     optimizer = torch.optim.Adam(box_head.parameters(), lr=0.0007)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[8, 13], gamma=0.1)
-    num_epochs = 40
+    num_epochs = 50
 
     # global loss list
     list_avg_train_loss = []
@@ -150,7 +150,7 @@ if __name__ == "__main__":
                                                                labels.to(net_device),
                                                                regressor_target.to(net_device),
                                                                effective_batch=32,
-                                                               lambda_coeff=2.349)
+                                                               lambda_coeff=1)
             loss.backward()
             optimizer.step()
 
@@ -210,7 +210,7 @@ if __name__ == "__main__":
                                                                    labels.to(net_device),
                                                                    regressor_target.to(net_device),
                                                                    effective_batch=32,
-                                                                   lambda_coeff=2.349)
+                                                                   lambda_coeff=1)
 
                 avg_test_loss += loss.item()
                 avg_class_test_loss += loss_class.item()
