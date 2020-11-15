@@ -570,7 +570,9 @@ class BoxHead(torch.nn.Module):
 
                         if iou > iou_thresh:
                             match[i_pred, class_pred] = 1
-                            score[i_pred, class_pred] = nms_scores[bz][i_pred]
+
+                # no matter how we always store the bbox scores
+                score[i_pred, class_pred] = nms_scores[bz][i_pred]
 
             matches.append(match)
             scores.append(score)
