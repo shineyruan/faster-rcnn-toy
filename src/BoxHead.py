@@ -276,8 +276,10 @@ class BoxHead(torch.nn.Module):
             per_image_box_fg = per_image_box[~bg_ids]
             per_image_label_fg = per_image_label[~bg_ids]
 
-            per_image_proposals_fg_center = corners_to_centers(per_image_proposals_fg).to(self.device)
+            per_image_proposals_fg_center = \
+                corners_to_centers(per_image_proposals_fg).to(self.device)
             box_fg = torch.zeros(per_image_box_fg.shape[0], 4).to(self.device)
+
             for i in range(box_fg.shape[0]):
                 label = per_image_label_fg[i]
                 box_fg[:, 0] = per_image_box_fg[:, 0 + label * 4] * \
