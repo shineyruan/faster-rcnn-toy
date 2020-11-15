@@ -127,16 +127,16 @@ if __name__ == "__main__":
             match_values.append(matches)
             score_values.append(scores)
 
-            # for i in range(images.shape[0]):
-            #     out_img = visual_bbox_mask(images[i].cpu(), nms_boxes[i].cpu(),
-            #                                nms_scores[i].cpu(), nms_labels[i].cpu())
+            for i in range(images.shape[0]):
+                out_img = visual_bbox_mask(images[i].cpu(), nms_boxes[i].cpu(),
+                                           nms_scores[i].cpu(), nms_labels[i].cpu())
 
-            #     image_path = os.path.join(images_path, 'visual_output_' +
-            #                               str(iter) + '_' + str(i) + 'after_nms.png')
-            #     cv2.imwrite(image_path, out_img)
-            #     cv2.imshow("visualize output", out_img)
-            #     cv2.waitKey(0)
-            #     cv2.destroyAllWindows()
+                image_path = os.path.join(images_path, 'visual_output_' +
+                                          str(iter) + '_' + str(i) + 'after_nms.png')
+                cv2.imwrite(image_path, out_img)
+                cv2.imshow("visualize output", out_img)
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
 
     trues_per_batch = torch.stack(trues_per_batch)
     positives_per_batch = torch.stack(positives_per_batch)
