@@ -56,17 +56,27 @@ def MultiApply(func, *args, **kwargs):
 # This function compute the IOU between two set of boxes
 
 
-def IOU(boxA, boxB):
+def IOU(boxA, boxB, mode='center'):
     ##################################
     # compute the IOU between the boxA, boxB boxes
     # x_center, y_center, w, h
     ##################################
-    inter_x1 = max(boxA[0] - boxA[2] / 2, boxB[0] - boxB[2] / 2)
-    inter_y1 = max(boxA[1] - boxA[3] / 2, boxB[1] - boxB[3] / 2)
-    inter_x2 = min(boxA[0] + boxA[2] / 2, boxB[0] + boxB[2] / 2)
-    inter_y2 = min(boxA[1] + boxA[3] / 2, boxB[1] + boxB[3] / 2)
+    if mode == 'center':
+        inter_x1 = max(boxA[0] - boxA[2] / 2, boxB[0] - boxB[2] / 2)
+        inter_y1 = max(boxA[1] - boxA[3] / 2, boxB[1] - boxB[3] / 2)
+        inter_x2 = min(boxA[0] + boxA[2] / 2, boxB[0] + boxB[2] / 2)
+        inter_y2 = min(boxA[1] + boxA[3] / 2, boxB[1] + boxB[3] / 2)
+        area_boxA = boxA[2] * boxA[3]
+        area_boxB = boxB[2] * boxB[3]
+    else:
+        inter_x1 = max(boxA[0], boxB[0])
+        inter_y1 = max(boxA[1], boxB[1])
+        inter_x2 = min(boxA[2], boxB[2])
+        inter_y2 = min(boxA[3], boxB[3])
+        area_boxA = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
+        area_boxB = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
     inter = max((inter_x2 - inter_x1), 0) * max((inter_y2 - inter_y1), 0)
-    iou = inter / (boxA[2] * boxA[3] + boxB[2] * boxB[3] - inter + 1)
+    iou = inter / (area_boxA + area_boxB - inter + 1)
     return iou
 
 
