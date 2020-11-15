@@ -18,6 +18,7 @@ class BoxHead(torch.nn.Module):
 
         # initialize BoxHead
         self.intermediate = nn.Sequential(nn.Linear(in_features=256 * P * P, out_features=1024),
+                                          nn.ReLU(),
                                           nn.Linear(in_features=1024, out_features=1024),
                                           nn.ReLU())
 
@@ -464,6 +465,28 @@ class BoxHead(torch.nn.Module):
         box_pred = self.reg_head(intermediate_out)
 
         return class_logits, box_pred
+
+    def box_head_evaluation(self, nms_boxes, nms_scores, nms_labels, gt_boxes, gt_labels):
+        """
+        Constructs matches list & scores list for every class
+
+        Input
+        -----
+            boxes: list:len(bz){(post_NMS_boxes_per_image,4)}  ([x1,y1,x2,y2] format)
+            scores: list:len(bz){(post_NMS_boxes_per_image)}   ( the score for the top class for
+                                                                the regressed box)
+            labels: list:len(bz){(post_NMS_boxes_per_image)}   (top class of each regressed box)
+            gt_bboxes: list: len(bz){(n_obj, 4)}([x1, y1, x2, y2] format)
+            gt_labels: list: len(bz) {(n_obj)}
+
+        Output
+        -----
+            matches:        (bz, post_NMS_boxes_per_image, 3)
+            scores:         (bz, post_NMS_boxes_per_image, 3)
+            num_true:       (3, )
+            num_positives:  (3, )
+        """
+        pass
 
 
 import os
