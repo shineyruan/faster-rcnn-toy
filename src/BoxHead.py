@@ -3,7 +3,9 @@ import torch.nn.functional as F
 from torch import nn
 import torchvision
 
-from utils import matrix_IOU_corner, corner_to_center, center_to_corner, corners_to_centers, centers_to_corners
+from utils import (
+    matrix_IOU_corner, corner_to_center, center_to_corner, corners_to_centers, centers_to_corners
+)
 
 
 class BoxHead(torch.nn.Module):
@@ -180,19 +182,24 @@ class BoxHead(torch.nn.Module):
                 # Crop the x1, x2
                 prediction_box_corner[:, i * 4] = \
                     torch.min(prediction_box_corner[:, i * 4],
-                              img_size[1] * torch.ones(prediction_box_corner[:, i * 4].shape).to(self.device))
+                              img_size[1] * torch.ones(prediction_box_corner[:, i * 4].shape)
+                              .to(self.device))
                 prediction_box_corner[:, i * 4 + 2] = \
                     torch.min(prediction_box_corner[:, i * 4 + 2],
-                              img_size[1] * torch.ones(prediction_box_corner[:, i * 4].shape).to(self.device))
+                              img_size[1] * torch.ones(prediction_box_corner[:, i * 4].shape)
+                              .to(self.device))
                 # Crop the y1, y2
                 prediction_box_corner[:, i * 4 + 1] = \
                     torch.min(prediction_box_corner[:, i * 4 + 1],
-                              img_size[0] * torch.ones(prediction_box_corner[:, i * 4].shape).to(self.device))
+                              img_size[0] * torch.ones(prediction_box_corner[:, i * 4].shape)
+                              .to(self.device))
                 prediction_box_corner[:, i * 4 + 3] = \
                     torch.min(prediction_box_corner[:, i * 4 + 3],
-                              img_size[0] * torch.ones(prediction_box_corner[:, i * 4].shape).to(self.device))
+                              img_size[0] * torch.ones(prediction_box_corner[:, i * 4].shape)
+                              .to(self.device))
             prediction_box_corner = torch.max(prediction_box_corner,
-                                              torch.zeros(prediction_box_corner.shape).to(self.device))
+                                              torch.zeros(prediction_box_corner.shape)
+                                              .to(self.device))
 
             prediction_box_corner_max = torch.zeros(
                 prediction_box_corner.shape[0], 4).to(self.device)
