@@ -234,6 +234,46 @@ class BoxHead(torch.nn.Module):
 
         return boxes, scores, labels
 
+    def get_top_K(self, class_logits, box_regression, proposals, k=20):
+        """
+        Input:
+        -----
+              class_logits: (total_proposals,(C+1))
+              box_regression: (total_proposal,4*C)           ([t_x,t_y,t_w,t_h] format)
+              proposals: list:len(bz)(per_image_proposals,4) (the proposals are produced from RPN
+                                                                [x1,y1,x2,y2] format)
+        Output:
+        -----
+              boxes: list:len(bz){(k, 4)}   ([x1,y1,x2,y2] format)
+              scores: list:len(bz){(k, )}   (the score for the top class for the regressed box)
+              labels: list:len(bz){(k, )}   (top class of each regressed box)
+        """
+        boxes = []
+        scores = []
+        labels = []
+
+        start_id = 0
+        for batch_id in range(len(proposals)):
+            per_image_proposals = proposals[batch_id]
+            per_image_class = class_logits[start_id:start_id + per_image_proposals.shape[0], :]
+            per_image_box = box_regression[start_id:start_id + per_image_proposals.shape[0], :]
+            start_id += per_image_proposals.shape[0]
+
+            per_image_label = torch.argmax(per_image_class, dim=1)
+            bg_ids = per_image_label == 0
+            per_image_proposals_fg = per_image_proposals[~bg_ids]
+            per_image_class_fg = per_image_class[~bg_ids]
+            per_image_box_fg = per_image_box[~bg_ids]
+            per_image_label_fg = per_image_label[~bg_ids]
+
+            score_fg = torch.max(per_image_class_fg, dim=1).values.to(self.device)
+            score_fg_sorted_idx = torch.argsort(score_fg, descending=True)
+            boxes.append(per_image_box_fg[score_fg_sorted_idx[:k]])
+            scores.append(score_fg[score_fg_sorted_idx[:k]])
+            labels.append(per_image_label_fg[score_fg_sorted_idx[:k]])
+
+        return boxes, scores, labels
+
     def NMS(self, predict_class, prebox):
         """
         Input:
