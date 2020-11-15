@@ -110,6 +110,17 @@ def corner_to_center(bbox):
                          (bbox[3] - bbox[1])])
 
 
+def corners_to_centers(bbox):
+    # bbox: (n, 4) [x1, y1, x2, y2] format
+    # output: (n, 4) [x, y, w, h] format
+    output = torch.zeros(bbox.shape)
+    output[:, 0] = (bbox[:, 0] + bbox[:, 2]) / 2.0
+    output[:, 1] = (bbox[:, 1] + bbox[:, 3]) / 2.0
+    output[:, 2] = bbox[:, 2] - bbox[:, 0]
+    output[:, 3] = bbox[:, 3] - bbox[:, 1]
+    return output
+
+
 def center_to_corner(bbox):
     # bbox: (4, ) [x, y, w, h] format
     # output: (4, ) [x1, y1, x2, y2] format
@@ -117,6 +128,17 @@ def center_to_corner(bbox):
                          bbox[1] - bbox[3] / 2,
                          bbox[0] + bbox[2] / 2,
                          bbox[1] + bbox[3] / 2])
+
+
+def centers_to_corners(bbox):
+    # bbox: (n, 4) [x, y, w, h] format
+    # output: (n, 4) [x1, y1, x2, y2] format
+    output = torch.zeros(bbox.shape)
+    output[:, 0] = bbox[:, 0] - bbox[:, 2] / 2
+    output[:, 1] = bbox[:, 1] - bbox[:, 3] / 2
+    output[:, 2] = bbox[:, 0] + bbox[:, 2] / 2
+    output[:, 3] = bbox[:, 1] + bbox[:, 3] / 2
+    return output
 
 
 # This function decodes the output of the box head that are given in the [t_x,t_y,t_w,t_h] format
