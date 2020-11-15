@@ -466,16 +466,18 @@ class BoxHead(torch.nn.Module):
 
         return class_logits, box_pred
 
-    def box_head_evaluation(self, nms_boxes, nms_scores, nms_labels, gt_boxes, gt_labels):
+    def box_head_evaluation(self, nms_boxes: list, nms_scores: list, nms_labels: list,
+                            gt_boxes: list, gt_labels: list,
+                            iou_thresh: float = 0.5) -> tuple:
         """
         Constructs matches list & scores list for every class
 
         Input
         -----
-            boxes: list:len(bz){(post_NMS_boxes_per_image,4)}  ([x1,y1,x2,y2] format)
-            scores: list:len(bz){(post_NMS_boxes_per_image)}   ( the score for the top class for
+            nms_boxes: list:len(bz){(post_NMS_boxes_per_image,4)}  ([x1,y1,x2,y2] format)
+            nms_scores: list:len(bz){(post_NMS_boxes_per_image)}   ( the score for the top class for
                                                                 the regressed box)
-            labels: list:len(bz){(post_NMS_boxes_per_image)}   (top class of each regressed box)
+            nms_labels: list:len(bz){(post_NMS_boxes_per_image)}   (top class of each regressed box)
             gt_bboxes: list: len(bz){(n_obj, 4)}([x1, y1, x2, y2] format)
             gt_labels: list: len(bz) {(n_obj)}
 
@@ -486,7 +488,55 @@ class BoxHead(torch.nn.Module):
             num_true:       (3, )
             num_positives:  (3, )
         """
-        pass
+
+        matches = []
+        scores = []
+        num_trues = torch.zeros(3)
+        num_positives = torch.zeros(3)
+
+        batch_size = len(nms_labels)
+
+        for bz in range(batch_size):
+            match = torch.zeros(nms_labels[bz].shape[0], 3)
+            score = torch.zeros(match.shape)
+            num_true = torch.zeros(3)
+            num_positive = torch.zeros(num_true.shape)
+
+            # calculate trues
+            for obj_label in gt_labels[bz]:
+                if obj_label > 0:
+                    num_true[obj_label.type(torch.long) - 1] += 1
+
+            # calculate positives
+            cate = torch.argmax(nms_labels[bz], dim=1)
+            for obj_label in cate:
+                num_positive[obj_label.type(torch.long)] += 1
+
+            for i_pred, class_pred in enumerate(cate):
+                if class_pred + 1 in gt_labels[bz]:
+
+                    # retrieve class gt label
+                    i_gt_list = (gt_labels[bz] == class_pred + 1).nonzero(as_tuple=False)
+
+                    for i_gt in i_gt_list:
+                        # retrieve masks
+                        box_pred = nms_boxes[bz][i_pred]
+                        box_gt = gt_boxes[bz][i_gt]
+
+                        # compute IOU
+                        iou = matrix_IOU_corner(box_pred, box_gt)
+
+                        if iou > iou_thresh:
+                            match[i_pred, class_pred] = 1
+                            score[i_pred, class_pred] = nms_scores[bz][i_pred]
+
+            matches.append(match)
+            scores.append(score)
+            num_trues = torch.cat([num_trues, num_true], dim=0)
+            num_positives = torch.cat([num_positives, num_positive], dim=0)
+
+        return torch.stack(matches), torch.stack(scores), \
+            torch.sum(num_trues), torch.sum(num_positives)
 
 
 import os
