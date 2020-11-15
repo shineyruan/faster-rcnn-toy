@@ -261,16 +261,37 @@ class BoxHead(torch.nn.Module):
             per_image_box = box_regression[start_id:start_id + per_image_proposals.shape[0], :]
             start_id += per_image_proposals.shape[0]
 
-            per_image_label = torch.argmax(per_image_class, dim=1)
-            bg_ids = per_image_label == 0
+            per_image_label = torch.argmax(per_image_class, dim=1) - 1
+            bg_ids = per_image_label == -1
+
+            if torch.sum(~bg_ids) == 0:
+                boxes.append(torch.zeros(1, 4))
+                scores.append(torch.zeros(1))
+                labels.append(torch.zeros(1, dtype=torch.long))
+                continue
+
             per_image_proposals_fg = per_image_proposals[~bg_ids]
             per_image_class_fg = per_image_class[~bg_ids]
             per_image_box_fg = per_image_box[~bg_ids]
             per_image_label_fg = per_image_label[~bg_ids]
 
+            per_image_proposals_fg_center = corners_to_centers(per_image_proposals_fg).to(self.device)
+            box_fg = torch.zeros(per_image_box_fg.shape[0], 4).to(self.device)
+            for i in range(box_fg.shape[0]):
+                label = per_image_label_fg[i]
+                box_fg[:, 0] = per_image_box_fg[:, 0 + label * 4] * \
+                    per_image_proposals_fg_center[:, 2] + per_image_proposals_fg_center[:, 0]
+                box_fg[:, 1] = per_image_box_fg[:, 1 + label * 4] * \
+                    per_image_proposals_fg_center[:, 3] + per_image_proposals_fg_center[:, 1]
+                box_fg[:, 2] \
+                    = torch.exp(per_image_box_fg[:, 2 + label * 4]) * per_image_proposals_fg_center[:, 2]
+                box_fg[:, 3] \
+                    = torch.exp(per_image_box_fg[:, 3 + label * 4]) * per_image_proposals_fg_center[:, 3]
+            box_fg_corner = centers_to_corners(box_fg)
+
             score_fg = torch.max(per_image_class_fg, dim=1).values.to(self.device)
             score_fg_sorted_idx = torch.argsort(score_fg, descending=True)
-            boxes.append(per_image_box_fg[score_fg_sorted_idx[:k]])
+            boxes.append(box_fg_corner[score_fg_sorted_idx[:k]])
             scores.append(score_fg[score_fg_sorted_idx[:k]])
             labels.append(per_image_label_fg[score_fg_sorted_idx[:k]])
 
