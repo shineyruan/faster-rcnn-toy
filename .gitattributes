@@ -19,3 +19,4 @@ test/Loss/loss_test0.pt filter=lfs diff=lfs merge=lfs -text
 test/Loss/loss_test1.pt filter=lfs diff=lfs merge=lfs -text
 test/MultiScaleRoiAlign/multiscale_RoIAlign_test1.pt filter=lfs diff=lfs merge=lfs -text
 checkpoint_save/rpn_epoch39 filter=lfs diff=lfs merge=lfs -text
+evaluation/data/hold_out_images.npz filter=lfs diff=lfs merge=lfs -text
