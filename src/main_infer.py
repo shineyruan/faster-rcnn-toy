@@ -117,7 +117,7 @@ if __name__ == "__main__":
             class_logits, box_preds = box_head.forward(feature_vectors, training=False)
             nms_boxes, nms_scores, nms_labels = box_head.postprocess_detections(
                 class_logits, box_preds, proposals, keep_num_postNMS=2)
-            top_boxes, top_scores, top_labels = box_head.get_top_K(
+            top_boxes, _, top_labels = box_head.get_top_K(
                 class_logits, box_preds, proposals)
 
             matches, scores, num_trues, num_positives = \
@@ -131,7 +131,7 @@ if __name__ == "__main__":
 
             for i in range(images.shape[0]):
                 out_img = visual_bbox_mask(images[i].cpu(), top_boxes[i].cpu(),
-                                           top_scores[i].cpu(), top_labels[i].cpu())
+                                           top_labels[i].cpu())
 
                 image_path = os.path.join(images_path, 'visual_output_' +
                                           str(iter) + '_' + str(i) + 'top_K.png')
@@ -141,7 +141,7 @@ if __name__ == "__main__":
                 cv2.destroyAllWindows()
 
                 out_img = visual_bbox_mask(images[i].cpu(), nms_boxes[i].cpu(),
-                                           nms_scores[i].cpu(), nms_labels[i].cpu())
+                                           nms_labels[i].cpu(), nms_scores[i].cpu())
 
                 image_path = os.path.join(images_path, 'visual_output_' +
                                           str(iter) + '_' + str(i) + 'after_nms.png')
