@@ -9,7 +9,7 @@ Simple implementation of Faster-RCNN
 Faster-RCNN is a deep neural network targeting real-time object detection. It consists of a backbone made up with an FPN (Feature Pyramid Network) and an RPN (Region Proposal Network). The outputs coming from RPN are fed into a Box Head, which is an object detection head consisting of a classification branch and a regression branch, and each of them are set up with a set of fully connected layers. This repo implements a simplified version of Faster-RCNN, which uses a pre-trained FPN and RPN as backbone, and implements the Box Head. For infos about Faster-RCNN, please refer to the [official code](https://github.com/ShaoqingRen/faster_rcnn).
 
 ## Object Detection Demos
-On a simplified COCO dataset, we reached a 0.5265.
+On a simplified COCO dataset, we reached an mAP of 0.5265.
 
 <img src="demo/demo-1.png" width="500" />
 <img src="demo/demo-2.png" width="500" />
