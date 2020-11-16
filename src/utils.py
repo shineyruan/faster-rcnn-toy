@@ -21,19 +21,6 @@ def visual_bbox_mask(image: torch.Tensor, bboxes: torch.Tensor,
     out_img = cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR)
 
     for i in range(bboxes.shape[0]):
-        if gt_bbox is not None:
-            if bbox_format == 'corner':
-                x1_gt, y1_gt, x2_gt, y2_gt = bboxes[i][0], bboxes[i][1], bboxes[i][2], bboxes[i][3]
-            else:
-                x_gt, y_gt, w_gt, h_gt = bboxes[i][0], bboxes[i][1], bboxes[i][2], bboxes[i][3]
-                x1_gt = x_gt - w_gt / 2
-                y1_gt = y_gt - h_gt / 2
-                x2_gt = x_gt + w_gt / 2
-                y2_gt = y_gt + h_gt / 2
-
-            out_img = cv2.rectangle(out_img, (int(x1_gt), int(y1_gt)),
-                                    (int(x2_gt), int(y2_gt)), (255, 255, 255), 3)
-
         if bbox_format == 'corner':
             x1, y1, x2, y2 = bboxes[i][0], bboxes[i][1], bboxes[i][2], bboxes[i][3]
         else:
@@ -58,6 +45,21 @@ def visual_bbox_mask(image: torch.Tensor, bboxes: torch.Tensor,
                                   1.0,
                                   (20, 200, 200),
                                   2)
+
+    if gt_bbox is not None:
+        for i in range(gt_bbox.shape[0]):
+            if bbox_format == 'corner':
+                x1_gt, y1_gt, x2_gt, y2_gt = \
+                    gt_bbox[i][0], gt_bbox[i][1], gt_bbox[i][2], gt_bbox[i][3]
+            else:
+                x_gt, y_gt, w_gt, h_gt = gt_bbox[i][0], gt_bbox[i][1], gt_bbox[i][2], gt_bbox[i][3]
+                x1_gt = x_gt - w_gt / 2
+                y1_gt = y_gt - h_gt / 2
+                x2_gt = x_gt + w_gt / 2
+                y2_gt = y_gt + h_gt / 2
+
+            out_img = cv2.rectangle(out_img, (int(x1_gt), int(y1_gt)),
+                                    (int(x2_gt), int(y2_gt)), (255, 255, 255), 3)
 
     return out_img
 
