@@ -59,7 +59,7 @@ class BoxHead(torch.nn.Module):
             matched_gtbbox = torch.max(iou_mat, dim=0)
             background = matched_gtbbox.values < 0.5
 
-            proposal_labels = torch.zeros(num_proposals, 1).to(self.device)
+            proposal_labels = torch.zeros(num_proposals, 1, dtype=torch.long).to(self.device)
             regressor = torch.zeros(num_proposals, 4).to(self.device)
             for i in range(num_proposals):
                 if not background[i]:
