@@ -74,7 +74,7 @@ if __name__ == "__main__":
     keep_topK = 20
 
     # load checkpoint
-    checkpoint_list = ["rpn_epoch39-1", "rpn_epoch49-2"]
+    checkpoint_list = ["rpn_epoch39-1", "rpn_epoch49-2", "rpn_epoch49-3"]
     path = os.path.join(checkpoints_path, checkpoint_list[-1])
     checkpoint = torch.load(path)
 
@@ -114,9 +114,12 @@ if __name__ == "__main__":
             fpn_feat_list = list(backbone_out.values())
 
             feature_vectors = box_head.MultiScaleRoiAlign(fpn_feat_list, proposals)
+            proposal_labels, regressor_target = box_head.create_ground_truth(proposals,
+                                                                             labels,
+                                                                             bbox)
             class_logits, box_preds = box_head.forward(feature_vectors, training=False)
             nms_boxes, nms_scores, nms_labels = box_head.postprocess_detections(
-                class_logits, box_preds, proposals, keep_num_postNMS=5)
+                class_logits, box_preds, proposals, keep_num_postNMS=2)
             top_boxes, _, top_labels = box_head.get_top_K(
                 class_logits, box_preds, proposals)
 
@@ -129,10 +132,26 @@ if __name__ == "__main__":
             match_values.append(matches)
             score_values.append(scores)
 
+            start_id = 0
             for i in range(images.shape[0]):
+                # visualize proposals & ground truth
+                bg_ids = proposal_labels[start_id:start_id + proposals[i].shape[0]] == 0
+                bg_ids = bg_ids.squeeze()
+                proposals_fg = proposals[i][~bg_ids]
+                labels_fg = proposal_labels[start_id:start_id + proposals[i].shape[0]][~bg_ids] - 1
+                out_img = visual_bbox_mask(images[i].cpu(), proposals_fg.cpu(),
+                                           labels_fg.cpu(), gt_bbox=bbox[i])
+                image_path = os.path.join(images_path, 'visual_output_' +
+                                          str(iter) + '_' + str(i) + 'proposal_gt.png')
+                cv2.imwrite(image_path, out_img)
+                cv2.imshow("visualize output", out_img)
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
+                start_id += proposals[i].shape[0]
+
+                # visualize top 20 bounding boxes before NMS
                 out_img = visual_bbox_mask(images[i].cpu(), top_boxes[i].cpu(),
                                            top_labels[i].cpu())
-
                 image_path = os.path.join(images_path, 'visual_output_' +
                                           str(iter) + '_' + str(i) + 'top_K.png')
                 cv2.imwrite(image_path, out_img)
@@ -140,9 +159,9 @@ if __name__ == "__main__":
                 cv2.waitKey(0)
                 cv2.destroyAllWindows()
 
+                # visualize predict bbox after NMS
                 out_img = visual_bbox_mask(images[i].cpu(), nms_boxes[i].cpu(),
                                            nms_labels[i].cpu(), nms_scores[i].cpu())
-
                 image_path = os.path.join(images_path, 'visual_output_' +
                                           str(iter) + '_' + str(i) + 'after_nms.png')
                 cv2.imwrite(image_path, out_img)
