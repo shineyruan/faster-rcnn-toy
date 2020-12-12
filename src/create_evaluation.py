@@ -70,7 +70,7 @@ if __name__ == '__main__':
                 else:
                     cpu_boxes.append(box.to('cpu').detach().numpy())
                     cpu_scores.append(score.to('cpu').detach().numpy())
-                    cpu_labels.append(label.to('cpu').detach().numpy())
+                    cpu_labels.append(label.to('cpu').detach().numpy() + 1)  # evaluation code has 1--3 for labels
 
     np.savez('evaluation/data/predictions.npz', predictions={
              'boxes': cpu_boxes, 'scores': cpu_scores, 'labels': cpu_labels})
