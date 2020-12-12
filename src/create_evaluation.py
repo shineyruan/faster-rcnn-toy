@@ -25,7 +25,7 @@ if __name__ == '__main__':
     boxHead.eval()
 
     # Put the path were you have your save network
-    train_model_path = 'checkpoint_save/rpn_epoch39'
+    train_model_path = 'checkpoint_save/rpn_epoch49-3'
     checkpoint = torch.load(train_model_path)
     # reload models
     boxHead.load_state_dict(checkpoint['model_state_dict'])
@@ -55,7 +55,7 @@ if __name__ == '__main__':
 
             feature_vectors = boxHead.MultiScaleRoiAlign(fpn_feat_list, proposals)
 
-            class_logits, box_pred = boxHead(feature_vectors)
+            class_logits, box_pred = boxHead.forward(feature_vectors, training=False)
 
             # Do whatever post processing you find performs best
             boxes, scores, labels = boxHead.postprocess_detections(
@@ -72,5 +72,5 @@ if __name__ == '__main__':
                     cpu_scores.append(score.to('cpu').detach().numpy())
                     cpu_labels.append(label.to('cpu').detach().numpy())
 
-    np.savez('predictions.npz', predictions={
+    np.savez('evaluation/data/predictions.npz', predictions={
              'boxes': cpu_boxes, 'scores': cpu_scores, 'labels': cpu_labels})
