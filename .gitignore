@@ -218,3 +218,6 @@ $RECYCLE.BIN/
 checkpoints
 figures
 out_images*
+checkpoint_save/*
+data/*
+evaluation/*
