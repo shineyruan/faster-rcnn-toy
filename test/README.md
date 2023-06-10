@@ -1,35 +1,42 @@
 # HW4 Test Cases
+
 All the files can be loaded using torch.load()
 
 ## Test Scripts
+
 All the Python test scripts are located in `src/BoxHead.py`. When running test scripts, please go to the root folder and specify:
+
 ```bash
 python src/BoxHead.py
 ```
 
 ## Ground Truth
+
 Test Case for the create_ground_truth.
 Each test contains a dictionary with the following entries:
+
 * proposals: input of the create_ground_truth that corresponds to the proposals produced by the RPN
 * gt_labels: input of the create_ground_truth that corresponds to the ground truth labels of the ground truth bounding boxes
 * bbox: input of the create_ground_truth that correspond to the ground truth bounding boxes
 * labels: output of the create_ground_truth. the ground truth labels assigned to each proposal
 * regressor_target: output. the target of the regressor for each proposal. It only makes sense to compare your regressor output
-with the given one for the proposals that are not assigned to the background ( for proposals assigned to background the regressor target in the 
-given test case is an arbitary vector)
+with the given one for the proposals that are not assigned to the background ( for proposals assigned to background the regressor target in the given test case is an arbitary vector)
 
 ## MultiScaleRoiAlign
-Test Cases for the MutliScaleRoiAlign
+
+Test Cases for the MultiScaleRoiAlign
 Each test contains a dictionary with the following entries:
+
 * fpn_feat_list: input of the MultiScaleRoiAlign which corresponds to the list of features produced by the FPN for a batch of
 images
 * proposals: input of the MultiScaleRoiAlign which correspond to the top L proposals produced by the RPN for a batch of images
-* output_feature_vectors: output of MultiScaleRoiAlign containing the flatten pooled fetures for each proposal
+* output_feature_vectors: output of MultiScaleRoiAlign containing the flatten pooled features for each proposal
 
- 
 ## Loss
+
 Test Cases for the compute loss function.
 Each test contains a dictionary with the following entries
+
 * clas_logits: the input of the compute_loss which corresponds to the predictions of the classifier
 * box_preds: the input of the compute_loss which corresponds to the prediction of the regressor
 * labels: the input of the compute_loss which corresponds to the ground truth label of each proposal
