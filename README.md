@@ -36,6 +36,9 @@ On a simplified COCO dataset, we reached an mAP of 0.5265.
 
 ## Usage
 
+Please download all the 3 folders from the [Google Drive link](https://drive.google.com/drive/folders/1Li2Sf78ks9MI1BoayzENBkWpPs5Mjplo?usp=drive_link)
+and put them all under the project root directory.
+
 As a course project, we used a simplified COCO dataset provided from Prof.
 Jianbo Shi of University of Pennsylvania, which as attached in `data/` and
 dataset building methods can be found in `src/dataset.py`. All of the Box Head
