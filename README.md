@@ -5,8 +5,8 @@ Simple implementation of Faster-RCNN
 *CIS 680: Advanced Topics in Machine Perception FA2020, University of
 Pennsylvania.*
 
-**Authors:** Zhihao Ruan ruanzh@seas.upenn.edu, Kun Huang
-huangkun@seas.upenn.edu
+**Authors:** Zhihao Ruan <ruanzh@seas.upenn.edu>, Kun Huang
+<huangkun@seas.upenn.edu>
 
 ## Introduction
 
